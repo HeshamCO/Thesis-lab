@@ -53,6 +53,7 @@ bun --bun run typecheck
 bun --bun run lint
 bun --bun run test
 bun --bun run format
+bun --bun run seed:ollama
 bun --bun run seed:scenarios
 ```
 
@@ -65,6 +66,32 @@ bun --bun run db:studio
 ```
 
 The runtime schema is currently created by the local API server on startup.
+
+## Ollama Local Model
+
+The app can use Ollama through its OpenAI-compatible endpoint.
+
+Start Ollama and pull the model:
+
+```bash
+ollama serve
+ollama pull deepseek-r1:7b
+```
+
+Create or update the local model config:
+
+```bash
+bun --bun run seed:ollama
+```
+
+This creates a model named `Ollama DeepSeek R1 7B` with:
+
+- `Base URL`: `http://localhost:11434/v1`
+- `Model name`: `deepseek-r1:7b`
+- `API key env var`: `OLLAMA_API_KEY`
+- `Role tags`: `attacker`, `benign`, `judge`, `local`, `ollama`
+
+Ollama does not require a real API key. If `OLLAMA_API_KEY` is missing, the worker automatically uses the standard local dummy key `ollama` for localhost model endpoints.
 
 ## Example Scenario Seed
 

@@ -2,6 +2,7 @@ import type {
 	DefenseConfig,
 	DefenseConfigInput,
 	ModelConfig,
+	ModelConnectionResult,
 	ModelConfigInput,
 	RunDetail,
 	RunListItem,
@@ -71,6 +72,10 @@ export const api = {
 		}),
 	deleteModel: (id: string) =>
 		request<void>(`/api/models/${id}`, { method: "DELETE" }),
+	testModel: (id: string) =>
+		request<ModelConnectionResult>(`/api/models/${id}/test`, {
+			method: "POST",
+		}),
 	defenses: () => request<DefenseConfig[]>("/api/defenses"),
 	createDefense: (data: DefenseConfigInput) =>
 		request<DefenseConfig>("/api/defenses", {

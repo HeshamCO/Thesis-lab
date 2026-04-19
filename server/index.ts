@@ -2,6 +2,7 @@ import cors from "cors";
 import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
+import "./env";
 import {
 	defenseConfigInputSchema,
 	modelConfigInputSchema,
@@ -10,6 +11,7 @@ import {
 } from "../src/lib/thesis/schemas";
 import { thesisDb } from "./db";
 import { ExperimentEngine } from "./engine";
+import { testModelConnection } from "./model-health";
 
 const PORT = Number(process.env.API_PORT ?? 3334);
 const app = express();
@@ -98,6 +100,17 @@ app.put("/api/models/:id", (request, response) => {
 app.delete("/api/models/:id", (request, response) => {
 	thesisDb.deleteModel(request.params.id);
 	response.status(204).end();
+});
+
+app.post("/api/models/:id/test", async (request, response) => {
+	const model = thesisDb.getModel(request.params.id);
+	if (!model) {
+		response.status(404).json({ error: "Model not found." });
+		return;
+	}
+
+	const result = await testModelConnection(model);
+	response.json(result);
 });
 
 app.get("/api/defenses", (_request, response) => {

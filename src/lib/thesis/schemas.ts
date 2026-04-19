@@ -109,6 +109,15 @@ export type ModelConfig = ModelConfigInput & {
 	updatedAt: string;
 };
 
+export type ModelConnectionResult = {
+	ok: boolean;
+	status: "connected" | "failed";
+	message: string;
+	latencyMs: number;
+	checkedAt: string;
+	sample?: string;
+};
+
 export type DefenseConfig = DefenseConfigInput & {
 	id: string;
 	createdAt: string;

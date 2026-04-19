@@ -1,9 +1,17 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { SaveIcon, Trash2Icon } from "lucide-react";
+import {
+	CircleCheckIcon,
+	CircleXIcon,
+	Loader2Icon,
+	PlugZapIcon,
+	SaveIcon,
+	Trash2Icon,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
+import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import {
 	Card,
@@ -24,7 +32,11 @@ import {
 } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type { ModelConfig, ModelConfigInput } from "#/lib/thesis/schemas";
+import type {
+	ModelConfig,
+	ModelConfigInput,
+	ModelConnectionResult,
+} from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/models/")({ component: ModelsPage });
 
@@ -41,14 +53,51 @@ const emptyModel: ModelConfigInput = {
 function ModelsPage() {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<ModelConfigInput>(emptyModel);
+	const [connectionByModelId, setConnectionByModelId] = useState<
+		Record<string, ModelConnectionState>
+	>({});
 	const queryClient = useQueryClient();
 	const models = useQuery({ queryKey: queryKeys.models, queryFn: api.models });
+	const testModel = useMutation({
+		mutationFn: (model: ModelConfig) => api.testModel(model.id),
+		onMutate: (model) => {
+			setConnectionByModelId((current) => ({
+				...current,
+				[model.id]: {
+					status: "testing",
+					message: "Checking endpoint and model response...",
+				},
+			}));
+		},
+		onSuccess: (result, model) => {
+			setConnectionByModelId((current) => ({
+				...current,
+				[model.id]: toConnectionState(result),
+			}));
+			if (result.ok) {
+				toast.success(`${model.name} connected`);
+			} else {
+				toast.error(`${model.name} failed: ${result.message}`);
+			}
+		},
+		onError: (error, model) => {
+			setConnectionByModelId((current) => ({
+				...current,
+				[model.id]: {
+					status: "failed",
+					message: error.message,
+				},
+			}));
+			toast.error(`${model.name} failed: ${error.message}`);
+		},
+	});
 	const saveModel = useMutation({
 		mutationFn: (input: ModelConfigInput) =>
 			editingId ? api.updateModel(editingId, input) : api.createModel(input),
-		onSuccess: () => {
+		onSuccess: (model) => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.models });
 			toast.success(editingId ? "Model updated" : "Model created");
+			testModel.mutate(model);
 			setEditingId(null);
 			setForm(emptyModel);
 		},
@@ -198,45 +247,130 @@ function ModelsPage() {
 								<TableHead>Model</TableHead>
 								<TableHead>Endpoint</TableHead>
 								<TableHead>Env var</TableHead>
+								<TableHead>Connection</TableHead>
 								<TableHead />
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(models.data ?? []).map((model) => (
-								<TableRow key={model.id}>
-									<TableCell>{model.name}</TableCell>
-									<TableCell>{model.modelName}</TableCell>
-									<TableCell>{model.baseUrl}</TableCell>
-									<TableCell>{model.apiKeyEnvVar}</TableCell>
-									<TableCell>
-										<div className="flex gap-2">
-											<Button
-												variant="outline"
-												size="sm"
-												onClick={() => {
-													setEditingId(model.id);
-													setForm(toModelInput(model));
-												}}
-											>
-												Edit
-											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => deleteModel.mutate(model.id)}
-											>
-												<Trash2Icon data-icon="inline-start" />
-												Delete
-											</Button>
-										</div>
-									</TableCell>
-								</TableRow>
-							))}
+							{(models.data ?? []).map((model) => {
+								const connection = connectionByModelId[model.id] ?? {
+									status: "unknown",
+									message: "Not tested in this session.",
+								};
+								return (
+									<TableRow key={model.id}>
+										<TableCell>{model.name}</TableCell>
+										<TableCell>{model.modelName}</TableCell>
+										<TableCell>{model.baseUrl}</TableCell>
+										<TableCell>{model.apiKeyEnvVar}</TableCell>
+										<TableCell>
+											<ModelConnectionBadge connection={connection} />
+										</TableCell>
+										<TableCell>
+											<div className="flex gap-2">
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={connection.status === "testing"}
+													onClick={() => testModel.mutate(model)}
+												>
+													<PlugZapIcon data-icon="inline-start" />
+													Test
+												</Button>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={() => {
+														setEditingId(model.id);
+														setForm(toModelInput(model));
+													}}
+												>
+													Edit
+												</Button>
+												<Button
+													variant="ghost"
+													size="sm"
+													onClick={() => deleteModel.mutate(model.id)}
+												>
+													<Trash2Icon data-icon="inline-start" />
+													Delete
+												</Button>
+											</div>
+										</TableCell>
+									</TableRow>
+								);
+							})}
 						</TableBody>
 					</Table>
 				</CardContent>
 			</Card>
 		</>
+	);
+}
+
+type ModelConnectionState = {
+	status: "unknown" | "testing" | "connected" | "failed";
+	message: string;
+	latencyMs?: number;
+	checkedAt?: string;
+	sample?: string;
+};
+
+function ModelConnectionBadge({
+	connection,
+}: {
+	connection: ModelConnectionState;
+}) {
+	if (connection.status === "testing") {
+		return (
+			<div className="flex flex-col gap-1">
+				<Badge variant="outline">
+					<Loader2Icon className="animate-spin" />
+					Testing
+				</Badge>
+				<span className="text-muted-foreground text-xs">
+					{connection.message}
+				</span>
+			</div>
+		);
+	}
+
+	if (connection.status === "connected") {
+		return (
+			<div className="flex flex-col gap-1">
+				<Badge className="bg-emerald-600 text-white">
+					<CircleCheckIcon />
+					Live
+				</Badge>
+				<span className="text-muted-foreground text-xs">
+					{connection.latencyMs} ms
+					{connection.sample ? ` · ${connection.sample}` : ""}
+				</span>
+			</div>
+		);
+	}
+
+	if (connection.status === "failed") {
+		return (
+			<div className="flex flex-col gap-1">
+				<Badge variant="destructive">
+					<CircleXIcon />
+					Failed
+				</Badge>
+				<span className="max-w-72 text-muted-foreground text-xs">
+					{connection.message}
+				</span>
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex flex-col gap-1">
+			<Badge variant="secondary">Not tested</Badge>
+			<span className="text-muted-foreground text-xs">
+				{connection.message}
+			</span>
+		</div>
 	);
 }
 
@@ -271,5 +405,17 @@ function toModelInput(model: ModelConfig): ModelConfigInput {
 		temperature: model.temperature,
 		maxTokens: model.maxTokens,
 		roleTags: model.roleTags,
+	};
+}
+
+function toConnectionState(
+	result: ModelConnectionResult,
+): ModelConnectionState {
+	return {
+		status: result.ok ? "connected" : "failed",
+		message: result.message,
+		latencyMs: result.latencyMs,
+		checkedAt: result.checkedAt,
+		sample: result.sample,
 	};
 }

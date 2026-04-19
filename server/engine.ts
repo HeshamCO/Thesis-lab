@@ -248,7 +248,7 @@ export class ExperimentEngine {
 	}
 
 	private async callModel(model: ModelConfig, prompt: string): Promise<string> {
-		const apiKey = process.env[model.apiKeyEnvVar];
+		const apiKey = resolveApiKey(model);
 		if (!apiKey) {
 			return this.mockModelResponse(prompt);
 		}
@@ -341,6 +341,28 @@ export class ExperimentEngine {
 	private emit(event: string, runId: string, payload: unknown) {
 		this.io.to(`run:${runId}`).emit(event, payload);
 	}
+}
+
+function resolveApiKey(model: ModelConfig) {
+	const apiKey = process.env[model.apiKeyEnvVar];
+	if (apiKey) {
+		return apiKey;
+	}
+
+	try {
+		const url = new URL(model.baseUrl);
+		if (
+			url.hostname === "localhost" ||
+			url.hostname === "127.0.0.1" ||
+			url.hostname === "::1"
+		) {
+			return "ollama";
+		}
+	} catch {
+		return "";
+	}
+
+	return "";
 }
 
 function parseJsonObject(content: string) {
