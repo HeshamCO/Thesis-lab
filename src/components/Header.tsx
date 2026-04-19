@@ -1,12 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import {
-	ActivityIcon,
-	BotIcon,
-	DatabaseIcon,
-	LayoutDashboardIcon,
-	ShieldIcon,
-	TargetIcon,
-} from "lucide-react";
+import { ActivityIcon, BotIcon, DatabaseIcon, LayoutDashboardIcon, ShieldIcon, TargetIcon } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "#/lib/utils";
 
@@ -47,9 +40,7 @@ export default function Header() {
 					))}
 				</nav>
 				<div className="mt-auto flex items-center justify-between gap-3">
-					<p className="m-0 hidden text-xs text-muted-foreground lg:block">
-						Local research workspace
-					</p>
+					<p className="m-0 hidden text-xs text-muted-foreground lg:block">Local research workspace</p>
 					<ThemeToggle />
 				</div>
 			</div>

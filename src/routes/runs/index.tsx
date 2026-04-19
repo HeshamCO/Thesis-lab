@@ -6,31 +6,11 @@ import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "#/components/ui/select";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
 import type { StartRunInput } from "#/lib/thesis/schemas";
@@ -84,8 +64,7 @@ function RunsPage() {
 				<CardHeader>
 					<CardTitle>Start experiment run</CardTitle>
 					<CardDescription>
-						The selected scenario, models, defense, and retrieval settings are
-						copied into immutable run snapshots.
+						The selected scenario, models, defense, and retrieval settings are copied into immutable run snapshots.
 					</CardDescription>
 				</CardHeader>
 				<CardContent>
@@ -109,9 +88,7 @@ function RunsPage() {
 								value={form.attackerModelId}
 								placeholder="Select attacker"
 								items={models.data ?? []}
-								onChange={(attackerModelId) =>
-									setForm({ ...form, attackerModelId })
-								}
+								onChange={(attackerModelId) => setForm({ ...form, attackerModelId })}
 							/>
 						</Field>
 						<Field label="Benign model">
@@ -119,9 +96,7 @@ function RunsPage() {
 								value={form.benignModelId}
 								placeholder="Select benign"
 								items={models.data ?? []}
-								onChange={(benignModelId) =>
-									setForm({ ...form, benignModelId })
-								}
+								onChange={(benignModelId) => setForm({ ...form, benignModelId })}
 							/>
 						</Field>
 						<Field label="Defense">
@@ -129,9 +104,7 @@ function RunsPage() {
 								value={form.defenseConfigId}
 								placeholder="Select defense"
 								items={defenses.data ?? []}
-								onChange={(defenseConfigId) =>
-									setForm({ ...form, defenseConfigId })
-								}
+								onChange={(defenseConfigId) => setForm({ ...form, defenseConfigId })}
 							/>
 						</Field>
 						<Field label="Max attempts">
@@ -192,10 +165,7 @@ function RunsPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Run history</CardTitle>
-					<CardDescription>
-						Completed and interrupted runs remain available for inspection and
-						export.
-					</CardDescription>
+					<CardDescription>Completed and interrupted runs remain available for inspection and export.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Table>
@@ -220,9 +190,7 @@ function RunsPage() {
 									<TableCell>
 										{run.summary?.attemptsUsed ?? 0}/{run.maxAttempts}
 									</TableCell>
-									<TableCell>
-										{run.summary ? String(run.summary.finalSuccess) : "—"}
-									</TableCell>
+									<TableCell>{run.summary ? String(run.summary.finalSuccess) : "—"}</TableCell>
 									<TableCell>
 										<Button variant="outline" size="sm" asChild>
 											<Link to="/runs/$runId" params={{ runId: run.id }}>
@@ -269,13 +237,7 @@ function EntitySelect({
 	);
 }
 
-function Field({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
 		<label className="flex flex-col gap-2">
 			<Label>{label}</Label>

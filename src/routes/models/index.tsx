@@ -1,42 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-	CircleCheckIcon,
-	CircleXIcon,
-	Loader2Icon,
-	PlugZapIcon,
-	SaveIcon,
-	Trash2Icon,
-} from "lucide-react";
+import { CircleCheckIcon, CircleXIcon, Loader2Icon, PlugZapIcon, SaveIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type {
-	ModelConfig,
-	ModelConfigInput,
-	ModelConnectionResult,
-} from "#/lib/thesis/schemas";
+import type { ModelConfig, ModelConfigInput, ModelConnectionResult } from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/models/")({ component: ModelsPage });
 
@@ -53,9 +29,7 @@ const emptyModel: ModelConfigInput = {
 function ModelsPage() {
 	const [editingId, setEditingId] = useState<string | null>(null);
 	const [form, setForm] = useState<ModelConfigInput>(emptyModel);
-	const [connectionByModelId, setConnectionByModelId] = useState<
-		Record<string, ModelConnectionState>
-	>({});
+	const [connectionByModelId, setConnectionByModelId] = useState<Record<string, ModelConnectionState>>({});
 	const queryClient = useQueryClient();
 	const models = useQuery({ queryKey: queryKeys.models, queryFn: api.models });
 	const testModel = useMutation({
@@ -92,8 +66,7 @@ function ModelsPage() {
 		},
 	});
 	const saveModel = useMutation({
-		mutationFn: (input: ModelConfigInput) =>
-			editingId ? api.updateModel(editingId, input) : api.createModel(input),
+		mutationFn: (input: ModelConfigInput) => (editingId ? api.updateModel(editingId, input) : api.createModel(input)),
 		onSuccess: (model) => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.models });
 			toast.success(editingId ? "Model updated" : "Model created");
@@ -122,9 +95,7 @@ function ModelsPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>{editingId ? "Edit model" : "Create model"}</CardTitle>
-					<CardDescription>
-						API keys stay in `.env.local`; configs store only the env var name.
-					</CardDescription>
+					<CardDescription>API keys stay in `.env.local`; configs store only the env var name.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<form
@@ -137,27 +108,21 @@ function ModelsPage() {
 						<Field label="Name">
 							<Input
 								value={form.name}
-								onChange={(event) =>
-									setForm({ ...form, name: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, name: event.currentTarget.value })}
 								required
 							/>
 						</Field>
 						<Field label="Base URL">
 							<Input
 								value={form.baseUrl}
-								onChange={(event) =>
-									setForm({ ...form, baseUrl: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, baseUrl: event.currentTarget.value })}
 								required
 							/>
 						</Field>
 						<Field label="Model name">
 							<Input
 								value={form.modelName}
-								onChange={(event) =>
-									setForm({ ...form, modelName: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, modelName: event.currentTarget.value })}
 								required
 							/>
 						</Field>
@@ -234,10 +199,7 @@ function ModelsPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Configured models</CardTitle>
-					<CardDescription>
-						Use role tags to remember intended use; run selection remains
-						explicit.
-					</CardDescription>
+					<CardDescription>Use role tags to remember intended use; run selection remains explicit.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Table>
@@ -287,11 +249,7 @@ function ModelsPage() {
 												>
 													Edit
 												</Button>
-												<Button
-													variant="ghost"
-													size="sm"
-													onClick={() => deleteModel.mutate(model.id)}
-												>
+												<Button variant="ghost" size="sm" onClick={() => deleteModel.mutate(model.id)}>
 													<Trash2Icon data-icon="inline-start" />
 													Delete
 												</Button>
@@ -316,11 +274,7 @@ type ModelConnectionState = {
 	sample?: string;
 };
 
-function ModelConnectionBadge({
-	connection,
-}: {
-	connection: ModelConnectionState;
-}) {
+function ModelConnectionBadge({ connection }: { connection: ModelConnectionState }) {
 	if (connection.status === "testing") {
 		return (
 			<div className="flex flex-col gap-1">
@@ -328,9 +282,7 @@ function ModelConnectionBadge({
 					<Loader2Icon className="animate-spin" />
 					Testing
 				</Badge>
-				<span className="text-muted-foreground text-xs">
-					{connection.message}
-				</span>
+				<span className="text-muted-foreground text-xs">{connection.message}</span>
 			</div>
 		);
 	}
@@ -357,9 +309,7 @@ function ModelConnectionBadge({
 					<CircleXIcon />
 					Failed
 				</Badge>
-				<span className="max-w-72 text-muted-foreground text-xs">
-					{connection.message}
-				</span>
+				<span className="max-w-72 text-muted-foreground text-xs">{connection.message}</span>
 			</div>
 		);
 	}
@@ -367,20 +317,12 @@ function ModelConnectionBadge({
 	return (
 		<div className="flex flex-col gap-1">
 			<Badge variant="secondary">Not tested</Badge>
-			<span className="text-muted-foreground text-xs">
-				{connection.message}
-			</span>
+			<span className="text-muted-foreground text-xs">{connection.message}</span>
 		</div>
 	);
 }
 
-function Field({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
 		<label className="flex flex-col gap-2">
 			<Label>{label}</Label>
@@ -408,9 +350,7 @@ function toModelInput(model: ModelConfig): ModelConfigInput {
 	};
 }
 
-function toConnectionState(
-	result: ModelConnectionResult,
-): ModelConnectionState {
+function toConnectionState(result: ModelConnectionResult): ModelConnectionState {
 	return {
 		status: result.ok ? "connected" : "failed",
 		message: result.message,

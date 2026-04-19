@@ -5,40 +5,16 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "#/components/ui/select";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { Textarea } from "#/components/ui/textarea";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type {
-	DefenseConfig,
-	DefenseConfigInput,
-	DefenseMode,
-} from "#/lib/thesis/schemas";
+import type { DefenseConfig, DefenseConfigInput, DefenseMode } from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/defenses/")({ component: DefensesPage });
 
@@ -60,9 +36,7 @@ function DefensesPage() {
 	});
 	const saveDefense = useMutation({
 		mutationFn: (input: DefenseConfigInput) =>
-			editingId
-				? api.updateDefense(editingId, input)
-				: api.createDefense(input),
+			editingId ? api.updateDefense(editingId, input) : api.createDefense(input),
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: queryKeys.defenses });
 			toast.success(editingId ? "Defense updated" : "Defense created");
@@ -90,9 +64,7 @@ function DefensesPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>{editingId ? "Edit defense" : "Create defense"}</CardTitle>
-					<CardDescription>
-						Blocked patterns are case-insensitive regular expressions.
-					</CardDescription>
+					<CardDescription>Blocked patterns are case-insensitive regular expressions.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<form
@@ -105,19 +77,12 @@ function DefensesPage() {
 						<Field label="Name">
 							<Input
 								value={form.name}
-								onChange={(event) =>
-									setForm({ ...form, name: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, name: event.currentTarget.value })}
 								required
 							/>
 						</Field>
 						<Field label="Mode">
-							<Select
-								value={form.mode}
-								onValueChange={(value) =>
-									setForm({ ...form, mode: value as DefenseMode })
-								}
-							>
+							<Select value={form.mode} onValueChange={(value) => setForm({ ...form, mode: value as DefenseMode })}>
 								<SelectTrigger>
 									<SelectValue />
 								</SelectTrigger>
@@ -125,9 +90,7 @@ function DefensesPage() {
 									<SelectGroup>
 										<SelectItem value="none">None</SelectItem>
 										<SelectItem value="prompt_guard">Prompt guard</SelectItem>
-										<SelectItem value="retrieval_filter">
-											Retrieval filter
-										</SelectItem>
+										<SelectItem value="retrieval_filter">Retrieval filter</SelectItem>
 										<SelectItem value="combined">Combined</SelectItem>
 									</SelectGroup>
 								</SelectContent>
@@ -192,9 +155,7 @@ function DefensesPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Configured defenses</CardTitle>
-					<CardDescription>
-						Defense snapshots are copied into each run at launch time.
-					</CardDescription>
+					<CardDescription>Defense snapshots are copied into each run at launch time.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Table>
@@ -224,11 +185,7 @@ function DefensesPage() {
 											>
 												Edit
 											</Button>
-											<Button
-												variant="ghost"
-												size="sm"
-												onClick={() => deleteDefense.mutate(defense.id)}
-											>
+											<Button variant="ghost" size="sm" onClick={() => deleteDefense.mutate(defense.id)}>
 												<Trash2Icon data-icon="inline-start" />
 												Delete
 											</Button>
@@ -244,13 +201,7 @@ function DefensesPage() {
 	);
 }
 
-function Field({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
 		<label className="flex flex-col gap-2">
 			<Label>{label}</Label>

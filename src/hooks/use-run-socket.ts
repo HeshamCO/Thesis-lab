@@ -1,12 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { io } from "socket.io-client";
-import type {
-	AttemptRecord,
-	RunDetail,
-	RunLogRecord,
-	StepResultRecord,
-} from "#/lib/thesis/schemas";
+import type { AttemptRecord, RunDetail, RunLogRecord, StepResultRecord } from "#/lib/thesis/schemas";
 import { queryKeys } from "#/lib/thesis/query";
 
 export function useRunSocket(runId: string) {
@@ -30,9 +25,7 @@ export function useRunSocket(runId: string) {
 					return current;
 				}
 				const attempts = current.attempts.some((item) => item.id === attempt.id)
-					? current.attempts.map((item) =>
-							item.id === attempt.id ? attempt : item,
-						)
+					? current.attempts.map((item) => (item.id === attempt.id ? attempt : item))
 					: [...current.attempts, attempt];
 				return { ...current, attempts };
 			});
@@ -43,12 +36,8 @@ export function useRunSocket(runId: string) {
 				if (!current) {
 					return current;
 				}
-				const stepResults = current.stepResults.some(
-					(item) => item.id === step.id,
-				)
-					? current.stepResults.map((item) =>
-							item.id === step.id ? step : item,
-						)
+				const stepResults = current.stepResults.some((item) => item.id === step.id)
+					? current.stepResults.map((item) => (item.id === step.id ? step : item))
 					: [...current.stepResults, step];
 				return { ...current, stepResults };
 			});

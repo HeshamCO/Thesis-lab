@@ -57,8 +57,7 @@ export const api = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteScenario: (id: string) =>
-		request<void>(`/api/scenarios/${id}`, { method: "DELETE" }),
+	deleteScenario: (id: string) => request<void>(`/api/scenarios/${id}`, { method: "DELETE" }),
 	models: () => request<ModelConfig[]>("/api/models"),
 	createModel: (data: ModelConfigInput) =>
 		request<ModelConfig>("/api/models", {
@@ -70,8 +69,7 @@ export const api = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteModel: (id: string) =>
-		request<void>(`/api/models/${id}`, { method: "DELETE" }),
+	deleteModel: (id: string) => request<void>(`/api/models/${id}`, { method: "DELETE" }),
 	testModel: (id: string) =>
 		request<ModelConnectionResult>(`/api/models/${id}/test`, {
 			method: "POST",
@@ -87,8 +85,7 @@ export const api = {
 			method: "PUT",
 			body: JSON.stringify(data),
 		}),
-	deleteDefense: (id: string) =>
-		request<void>(`/api/defenses/${id}`, { method: "DELETE" }),
+	deleteDefense: (id: string) => request<void>(`/api/defenses/${id}`, { method: "DELETE" }),
 	runs: () => request<RunListItem[]>("/api/runs"),
 	run: (id: string) => request<RunDetail>(`/api/runs/${id}`),
 	startRun: (data: StartRunInput) =>
@@ -96,8 +93,6 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify(data),
 		}),
-	pauseRun: (id: string) =>
-		request<RunDetail>(`/api/runs/${id}/pause`, { method: "POST" }),
-	resumeRun: (id: string) =>
-		request<RunDetail>(`/api/runs/${id}/resume`, { method: "POST" }),
+	pauseRun: (id: string) => request<RunDetail>(`/api/runs/${id}/pause`, { method: "POST" }),
+	resumeRun: (id: string) => request<RunDetail>(`/api/runs/${id}/resume`, { method: "POST" }),
 };

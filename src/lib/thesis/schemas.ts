@@ -1,27 +1,10 @@
 import { z } from "zod";
 
-export const defenseModeSchema = z.enum([
-	"none",
-	"prompt_guard",
-	"retrieval_filter",
-	"combined",
-]);
+export const defenseModeSchema = z.enum(["none", "prompt_guard", "retrieval_filter", "combined"]);
 
-export const evaluatorTypeSchema = z.enum([
-	"contains_text",
-	"not_contains_text",
-	"regex",
-	"llm_judge",
-]);
+export const evaluatorTypeSchema = z.enum(["contains_text", "not_contains_text", "regex", "llm_judge"]);
 
-export const runStatusSchema = z.enum([
-	"queued",
-	"running",
-	"pausing",
-	"paused",
-	"completed",
-	"failed",
-]);
+export const runStatusSchema = z.enum(["queued", "running", "pausing", "paused", "completed", "failed"]);
 
 export const attemptStatusSchema = z.enum(["running", "completed", "failed"]);
 

@@ -5,34 +5,16 @@ import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import {
-	Select,
-	SelectContent,
-	SelectGroup,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "#/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type {
-	EvaluatorType,
-	ScenarioDocumentInput,
-	ScenarioInput,
-	SuccessStepInput,
-} from "#/lib/thesis/schemas";
+import type { EvaluatorType, ScenarioDocumentInput, ScenarioInput, SuccessStepInput } from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/scenarios/$scenarioId")({
 	component: ScenarioDetailPage,
@@ -98,18 +80,11 @@ function ScenarioDetailPage() {
 				description="Edit the immutable template used when an experiment run starts."
 				action={
 					<div className="flex gap-2">
-						<Button
-							variant="outline"
-							onClick={() => deleteScenario.mutate()}
-							disabled={deleteScenario.isPending}
-						>
+						<Button variant="outline" onClick={() => deleteScenario.mutate()} disabled={deleteScenario.isPending}>
 							<Trash2Icon data-icon="inline-start" />
 							Delete
 						</Button>
-						<Button
-							onClick={() => updateScenario.mutate(normalizeScenario(form))}
-							disabled={updateScenario.isPending}
-						>
+						<Button onClick={() => updateScenario.mutate(normalizeScenario(form))} disabled={updateScenario.isPending}>
 							<SaveIcon data-icon="inline-start" />
 							Save
 						</Button>
@@ -120,19 +95,12 @@ function ScenarioDetailPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Scenario brief</CardTitle>
-					<CardDescription>
-						These fields become part of each run snapshot.
-					</CardDescription>
+					<CardDescription>These fields become part of each run snapshot.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<div className="grid gap-4 md:grid-cols-2">
 						<Field label="Name">
-							<Input
-								value={form.name}
-								onChange={(event) =>
-									setForm({ ...form, name: event.currentTarget.value })
-								}
-							/>
+							<Input value={form.name} onChange={(event) => setForm({ ...form, name: event.currentTarget.value })} />
 						</Field>
 						<Field label="Retrieval query">
 							<Input
@@ -159,25 +127,19 @@ function ScenarioDetailPage() {
 						<Field label="Notes">
 							<Textarea
 								value={form.notes}
-								onChange={(event) =>
-									setForm({ ...form, notes: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, notes: event.currentTarget.value })}
 							/>
 						</Field>
 						<Field label="Benign task">
 							<Textarea
 								value={form.benignTask}
-								onChange={(event) =>
-									setForm({ ...form, benignTask: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, benignTask: event.currentTarget.value })}
 							/>
 						</Field>
 						<Field label="Attacker goal">
 							<Textarea
 								value={form.attackerGoal}
-								onChange={(event) =>
-									setForm({ ...form, attackerGoal: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, attackerGoal: event.currentTarget.value })}
 							/>
 						</Field>
 					</div>
@@ -187,9 +149,7 @@ function ScenarioDetailPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Seed corpus documents</CardTitle>
-					<CardDescription>
-						These documents are inserted into each run-isolated RAG store.
-					</CardDescription>
+					<CardDescription>These documents are inserted into each run-isolated RAG store.</CardDescription>
 				</CardHeader>
 				<CardContent className="flex flex-col gap-4">
 					{form.documents.map((document, index) => (
@@ -205,9 +165,7 @@ function ScenarioDetailPage() {
 							onRemove={() =>
 								setForm({
 									...form,
-									documents: form.documents.filter(
-										(_, itemIndex) => itemIndex !== index,
-									),
+									documents: form.documents.filter((_, itemIndex) => itemIndex !== index),
 								})
 							}
 						/>
@@ -231,9 +189,7 @@ function ScenarioDetailPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Ordered success steps</CardTitle>
-					<CardDescription>
-						Every required step must pass for a full attack success.
-					</CardDescription>
+					<CardDescription>Every required step must pass for a full attack success.</CardDescription>
 				</CardHeader>
 				<CardContent className="flex flex-col gap-4">
 					{form.successSteps.map((step, index) => (
@@ -249,9 +205,7 @@ function ScenarioDetailPage() {
 							onRemove={() =>
 								setForm({
 									...form,
-									successSteps: form.successSteps.filter(
-										(_, itemIndex) => itemIndex !== index,
-									),
+									successSteps: form.successSteps.filter((_, itemIndex) => itemIndex !== index),
 								})
 							}
 						/>
@@ -300,17 +254,13 @@ function DocumentEditor({
 			<Field label="Title">
 				<Input
 					value={document.title}
-					onChange={(event) =>
-						onChange({ ...document, title: event.currentTarget.value })
-					}
+					onChange={(event) => onChange({ ...document, title: event.currentTarget.value })}
 				/>
 			</Field>
 			<Field label="Content">
 				<Textarea
 					value={document.content}
-					onChange={(event) =>
-						onChange({ ...document, content: event.currentTarget.value })
-					}
+					onChange={(event) => onChange({ ...document, content: event.currentTarget.value })}
 				/>
 			</Field>
 			<Button variant="ghost" type="button" onClick={onRemove}>
@@ -352,12 +302,7 @@ function StepEditor({
 					/>
 				</Field>
 				<Field label="Name">
-					<Input
-						value={step.name}
-						onChange={(event) =>
-							onChange({ ...step, name: event.currentTarget.value })
-						}
-					/>
+					<Input value={step.name} onChange={(event) => onChange({ ...step, name: event.currentTarget.value })} />
 				</Field>
 				<Field label="Evaluator">
 					<Select
@@ -366,10 +311,7 @@ function StepEditor({
 							onChange({
 								...step,
 								evaluatorType: value as EvaluatorType,
-								evaluatorConfig:
-									value === "regex"
-										? { pattern: configValue }
-										: { target: configValue },
+								evaluatorConfig: value === "regex" ? { pattern: configValue } : { target: configValue },
 							})
 						}
 					>
@@ -390,9 +332,7 @@ function StepEditor({
 			<Field label="Description">
 				<Textarea
 					value={step.description}
-					onChange={(event) =>
-						onChange({ ...step, description: event.currentTarget.value })
-					}
+					onChange={(event) => onChange({ ...step, description: event.currentTarget.value })}
 				/>
 			</Field>
 			<Field label="Evaluator target, pattern, or rubric">
@@ -425,9 +365,7 @@ function StepEditor({
 				<label className="flex items-center gap-2 text-sm">
 					<Checkbox
 						checked={step.required}
-						onCheckedChange={(checked) =>
-							onChange({ ...step, required: checked === true })
-						}
+						onCheckedChange={(checked) => onChange({ ...step, required: checked === true })}
 					/>
 					Required for full success
 				</label>
@@ -439,13 +377,7 @@ function StepEditor({
 	);
 }
 
-function Field({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
 		<label className="flex flex-col gap-2">
 			<Label>{label}</Label>
@@ -455,17 +387,13 @@ function Field({
 }
 
 function replaceAt<T>(items: T[], index: number, item: T) {
-	return items.map((current, currentIndex) =>
-		currentIndex === index ? item : current,
-	);
+	return items.map((current, currentIndex) => (currentIndex === index ? item : current));
 }
 
 function normalizeScenario(form: ScenarioInput): ScenarioInput {
 	return {
 		...form,
-		documents: form.documents.filter(
-			(document) => document.title.trim() && document.content.trim(),
-		),
+		documents: form.documents.filter((document) => document.title.trim() && document.content.trim()),
 		successSteps: form.successSteps
 			.map((step, index) => ({ ...step, orderIndex: index }))
 			.filter((step) => step.name.trim()),

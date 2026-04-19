@@ -3,11 +3,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
 import { ThesisDb } from "../../server/db";
 import { ExperimentEngine } from "../../server/engine";
-import type {
-	DefenseConfig,
-	ModelConfig,
-	ScenarioInput,
-} from "#/lib/thesis/schemas";
+import type { DefenseConfig, ModelConfig, ScenarioInput } from "#/lib/thesis/schemas";
 
 const createdDbs: ThesisDb[] = [];
 
@@ -76,9 +72,7 @@ describe("SQLite repository and engine", () => {
 });
 
 function createDb() {
-	const db = new ThesisDb(
-		join(tmpdir(), `thesis-lab-${crypto.randomUUID()}.sqlite`),
-	);
+	const db = new ThesisDb(join(tmpdir(), `thesis-lab-${crypto.randomUUID()}.sqlite`));
 	createdDbs.push(db);
 	return db;
 }

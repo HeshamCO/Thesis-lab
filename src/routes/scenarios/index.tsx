@@ -4,23 +4,10 @@ import { PlusIcon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { Textarea } from "#/components/ui/textarea";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
@@ -84,9 +71,7 @@ function ScenariosPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Create scenario</CardTitle>
-					<CardDescription>
-						Start with one corpus document and one required evaluator step.
-					</CardDescription>
+					<CardDescription>Start with one corpus document and one required evaluator step.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<form
@@ -99,9 +84,7 @@ function ScenariosPage() {
 						<Field label="Name">
 							<Input
 								value={form.name}
-								onChange={(event) =>
-									setForm({ ...form, name: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, name: event.currentTarget.value })}
 								required
 							/>
 						</Field>
@@ -120,18 +103,14 @@ function ScenariosPage() {
 						<Field label="Benign task">
 							<Textarea
 								value={form.benignTask}
-								onChange={(event) =>
-									setForm({ ...form, benignTask: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, benignTask: event.currentTarget.value })}
 								required
 							/>
 						</Field>
 						<Field label="Attacker goal">
 							<Textarea
 								value={form.attackerGoal}
-								onChange={(event) =>
-									setForm({ ...form, attackerGoal: event.currentTarget.value })
-								}
+								onChange={(event) => setForm({ ...form, attackerGoal: event.currentTarget.value })}
 								required
 							/>
 						</Field>
@@ -182,9 +161,7 @@ function ScenariosPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Scenario library</CardTitle>
-					<CardDescription>
-						Open a scenario to edit documents and ordered success steps.
-					</CardDescription>
+					<CardDescription>Open a scenario to edit documents and ordered success steps.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Table>
@@ -203,15 +180,10 @@ function ScenariosPage() {
 									<TableCell>{scenario.name}</TableCell>
 									<TableCell>{scenario.successSteps.length}</TableCell>
 									<TableCell>{scenario.documents.length}</TableCell>
-									<TableCell>
-										{new Date(scenario.updatedAt).toLocaleString()}
-									</TableCell>
+									<TableCell>{new Date(scenario.updatedAt).toLocaleString()}</TableCell>
 									<TableCell>
 										<Button variant="outline" size="sm" asChild>
-											<Link
-												to="/scenarios/$scenarioId"
-												params={{ scenarioId: scenario.id }}
-											>
+											<Link to="/scenarios/$scenarioId" params={{ scenarioId: scenario.id }}>
 												Edit
 											</Link>
 										</Button>
@@ -226,13 +198,7 @@ function ScenariosPage() {
 	);
 }
 
-function Field({
-	label,
-	children,
-}: {
-	label: string;
-	children: React.ReactNode;
-}) {
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
 	return (
 		<label className="flex flex-col gap-2">
 			<Label>{label}</Label>

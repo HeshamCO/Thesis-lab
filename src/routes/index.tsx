@@ -5,22 +5,9 @@ import { MetricCard } from "#/components/thesis/metric-card";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
 import { Button } from "#/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "#/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Progress } from "#/components/ui/progress";
-import {
-	Table,
-	TableBody,
-	TableCell,
-	TableHead,
-	TableHeader,
-	TableRow,
-} from "#/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
 
@@ -75,10 +62,7 @@ function DashboardPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Active run</CardTitle>
-					<CardDescription>
-						One active run is supported in v1 to keep checkpoint recovery
-						simple.
-					</CardDescription>
+					<CardDescription>One active run is supported in v1 to keep checkpoint recovery simple.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					{data?.activeRun ? (
@@ -87,13 +71,10 @@ function DashboardPage() {
 								<div className="flex flex-col gap-1">
 									<div className="flex items-center gap-2">
 										<StatusBadge status={data.activeRun.status} />
-										<span className="font-medium">
-											{data.activeRun.scenarioName}
-										</span>
+										<span className="font-medium">{data.activeRun.scenarioName}</span>
 									</div>
 									<p className="m-0 text-sm text-muted-foreground">
-										{data.activeRun.attackerModelName} attacking{" "}
-										{data.activeRun.benignModelName} with{" "}
+										{data.activeRun.attackerModelName} attacking {data.activeRun.benignModelName} with{" "}
 										{data.activeRun.defenseName}
 									</p>
 								</div>
@@ -107,17 +88,13 @@ function DashboardPage() {
 							<Progress
 								value={
 									data.activeRun.summary?.attemptsUsed
-										? (data.activeRun.summary.attemptsUsed /
-												data.activeRun.maxAttempts) *
-											100
+										? (data.activeRun.summary.attemptsUsed / data.activeRun.maxAttempts) * 100
 										: 0
 								}
 							/>
 						</div>
 					) : (
-						<p className="m-0 text-sm text-muted-foreground">
-							No active run. Start one from the runs workspace.
-						</p>
+						<p className="m-0 text-sm text-muted-foreground">No active run. Start one from the runs workspace.</p>
 					)}
 				</CardContent>
 			</Card>
@@ -125,10 +102,7 @@ function DashboardPage() {
 			<Card>
 				<CardHeader>
 					<CardTitle>Recent runs</CardTitle>
-					<CardDescription>
-						Last persisted runs with final success and utility score when
-						available.
-					</CardDescription>
+					<CardDescription>Last persisted runs with final success and utility score when available.</CardDescription>
 				</CardHeader>
 				<CardContent>
 					<Table>
@@ -152,12 +126,8 @@ function DashboardPage() {
 									<TableCell>
 										{run.summary?.attemptsUsed ?? 0}/{run.maxAttempts}
 									</TableCell>
-									<TableCell>
-										{run.summary ? String(run.summary.finalSuccess) : "—"}
-									</TableCell>
-									<TableCell>
-										{run.summary ? run.summary.utilityScore.toFixed(2) : "—"}
-									</TableCell>
+									<TableCell>{run.summary ? String(run.summary.finalSuccess) : "—"}</TableCell>
+									<TableCell>{run.summary ? run.summary.utilityScore.toFixed(2) : "—"}</TableCell>
 									<TableCell>
 										<Button variant="ghost" size="sm" asChild>
 											<Link to="/runs/$runId" params={{ runId: run.id }}>
