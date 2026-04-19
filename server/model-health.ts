@@ -1,18 +1,8 @@
 import OpenAI from "openai";
-import type { ModelConfig } from "../src/lib/thesis/schemas";
+import type { ModelConfig, ModelConnectionResult } from "../src/lib/thesis/schemas";
+import { resolveApiKey } from "./model-api";
 
-export type ModelConnectionResult = {
-	ok: boolean;
-	status: "connected" | "failed";
-	message: string;
-	latencyMs: number;
-	checkedAt: string;
-	sample?: string;
-};
-
-export async function testModelConnection(
-	model: ModelConfig,
-): Promise<ModelConnectionResult> {
+export async function testModelConnection(model: ModelConfig): Promise<ModelConnectionResult> {
 	const startedAt = Date.now();
 	const checkedAt = new Date().toISOString();
 	const apiKey = resolveApiKey(model);
@@ -40,8 +30,7 @@ export async function testModelConnection(
 			messages: [
 				{
 					role: "user",
-					content:
-						"Connection test. Reply with the exact word READY and no extra text.",
+					content: "Connection test. Reply with the exact word READY and no extra text.",
 				},
 			],
 		});
@@ -64,26 +53,4 @@ export async function testModelConnection(
 			checkedAt,
 		};
 	}
-}
-
-function resolveApiKey(model: ModelConfig) {
-	const apiKey = process.env[model.apiKeyEnvVar];
-	if (apiKey) {
-		return apiKey;
-	}
-
-	try {
-		const url = new URL(model.baseUrl);
-		if (
-			url.hostname === "localhost" ||
-			url.hostname === "127.0.0.1" ||
-			url.hostname === "::1"
-		) {
-			return "ollama";
-		}
-	} catch {
-		return "";
-	}
-
-	return "";
 }

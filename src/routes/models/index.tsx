@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
 import type { ModelConfig, ModelConfigInput, ModelConnectionResult } from "#/lib/thesis/schemas";
+import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/models/")({ component: ModelsPage });
 
@@ -274,50 +275,39 @@ type ModelConnectionState = {
 	sample?: string;
 };
 
+const CONNECTION_BADGES: Record<ModelConnectionState["status"], React.ReactNode> = {
+	testing: (
+		<Badge variant="outline">
+			<Loader2Icon className="animate-spin" />
+			Testing
+		</Badge>
+	),
+	connected: (
+		<Badge className="bg-emerald-600 text-white">
+			<CircleCheckIcon />
+			Live
+		</Badge>
+	),
+	failed: (
+		<Badge variant="destructive">
+			<CircleXIcon />
+			Failed
+		</Badge>
+	),
+	unknown: <Badge variant="secondary">Not tested</Badge>,
+};
+
 function ModelConnectionBadge({ connection }: { connection: ModelConnectionState }) {
-	if (connection.status === "testing") {
-		return (
-			<div className="flex flex-col gap-1">
-				<Badge variant="outline">
-					<Loader2Icon className="animate-spin" />
-					Testing
-				</Badge>
-				<span className="text-muted-foreground text-xs">{connection.message}</span>
-			</div>
-		);
-	}
-
-	if (connection.status === "connected") {
-		return (
-			<div className="flex flex-col gap-1">
-				<Badge className="bg-emerald-600 text-white">
-					<CircleCheckIcon />
-					Live
-				</Badge>
-				<span className="text-muted-foreground text-xs">
-					{connection.latencyMs} ms
-					{connection.sample ? ` · ${connection.sample}` : ""}
-				</span>
-			</div>
-		);
-	}
-
-	if (connection.status === "failed") {
-		return (
-			<div className="flex flex-col gap-1">
-				<Badge variant="destructive">
-					<CircleXIcon />
-					Failed
-				</Badge>
-				<span className="max-w-72 text-muted-foreground text-xs">{connection.message}</span>
-			</div>
-		);
-	}
-
+	const detail =
+		connection.status === "connected"
+			? `${connection.latencyMs} ms${connection.sample ? ` · ${connection.sample}` : ""}`
+			: connection.message;
 	return (
 		<div className="flex flex-col gap-1">
-			<Badge variant="secondary">Not tested</Badge>
-			<span className="text-muted-foreground text-xs">{connection.message}</span>
+			{CONNECTION_BADGES[connection.status]}
+			<span className={cn("text-muted-foreground text-xs", connection.status === "failed" && "max-w-72")}>
+				{detail}
+			</span>
 		</div>
 	);
 }
@@ -339,23 +329,10 @@ function splitList(value: string) {
 }
 
 function toModelInput(model: ModelConfig): ModelConfigInput {
-	return {
-		name: model.name,
-		baseUrl: model.baseUrl,
-		modelName: model.modelName,
-		apiKeyEnvVar: model.apiKeyEnvVar,
-		temperature: model.temperature,
-		maxTokens: model.maxTokens,
-		roleTags: model.roleTags,
-	};
+	const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...input } = model;
+	return input;
 }
 
 function toConnectionState(result: ModelConnectionResult): ModelConnectionState {
-	return {
-		status: result.ok ? "connected" : "failed",
-		message: result.message,
-		latencyMs: result.latencyMs,
-		checkedAt: result.checkedAt,
-		sample: result.sample,
-	};
+	return result;
 }

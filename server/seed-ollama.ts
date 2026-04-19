@@ -1,4 +1,3 @@
-import "./env";
 import { thesisDb } from "./db";
 import type { ModelConfig, ModelConfigInput } from "../src/lib/thesis/schemas";
 
@@ -55,32 +54,27 @@ async function seedThroughApi() {
 			return false;
 		}
 
-		let models = (await modelsResponse.json()) as ModelConfig[];
+		const models = (await modelsResponse.json()) as ModelConfig[];
 
-		for (const ollamaModel of OLLAMA_MODELS) {
-			const existing = findExisting(models, ollamaModel);
-			const response = await fetch(
-				existing
-					? `${API_BASE_URL}/api/models/${existing.id}`
-					: `${API_BASE_URL}/api/models`,
-				{
-					method: existing ? "PUT" : "POST",
-					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify(ollamaModel),
-				},
-			);
+		await Promise.all(
+			OLLAMA_MODELS.map(async (ollamaModel) => {
+				const existing = findExisting(models, ollamaModel);
+				const response = await fetch(
+					existing ? `${API_BASE_URL}/api/models/${existing.id}` : `${API_BASE_URL}/api/models`,
+					{
+						method: existing ? "PUT" : "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify(ollamaModel),
+					},
+				);
 
-			if (!response.ok) {
-				throw new Error(await response.text());
-			}
+				if (!response.ok) {
+					throw new Error(await response.text());
+				}
 
-			const saved = (await response.json()) as ModelConfig;
-			models = [saved, ...models.filter((model) => model.id !== saved.id)];
-
-			console.log(
-				`${existing ? "Updated" : "Created"} model config through API: ${ollamaModel.name}`,
-			);
-		}
+				console.log(`${existing ? "Updated" : "Created"} model config through API: ${ollamaModel.name}`);
+			}),
+		);
 		return true;
 	} catch {
 		return false;

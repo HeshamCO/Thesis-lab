@@ -6,6 +6,13 @@ export const evaluatorTypeSchema = z.enum(["contains_text", "not_contains_text",
 
 export const runStatusSchema = z.enum(["queued", "running", "pausing", "paused", "completed", "failed"]);
 
+export const ACTIVE_RUN_STATUSES: ReadonlyArray<z.infer<typeof runStatusSchema>> = [
+	"queued",
+	"running",
+	"pausing",
+	"paused",
+];
+
 export const attemptStatusSchema = z.enum(["running", "completed", "failed"]);
 
 export const retrievalSettingsSchema = z.object({

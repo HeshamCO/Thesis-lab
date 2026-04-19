@@ -2,8 +2,8 @@ import cors from "cors";
 import express from "express";
 import { createServer } from "node:http";
 import { Server } from "socket.io";
-import "./env";
 import {
+	ACTIVE_RUN_STATUSES,
 	defenseConfigInputSchema,
 	modelConfigInputSchema,
 	scenarioInputSchema,
@@ -44,9 +44,7 @@ app.get("/api/health", (_request, response) => {
 app.get("/api/dashboard", (_request, response) => {
 	const runs = thesisDb.listRuns();
 	response.json({
-		activeRun: runs.find((run) =>
-			["queued", "running", "pausing", "paused"].includes(run.status),
-		),
+		activeRun: runs.find((run) => ACTIVE_RUN_STATUSES.includes(run.status)),
 		recentRuns: runs.slice(0, 8),
 		scenarioCount: thesisDb.listScenarios().length,
 		modelCount: thesisDb.listModels().length,
