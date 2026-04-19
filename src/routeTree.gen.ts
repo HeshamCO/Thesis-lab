@@ -11,6 +11,12 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ScenariosIndexRouteImport } from './routes/scenarios/index'
+import { Route as RunsIndexRouteImport } from './routes/runs/index'
+import { Route as ModelsIndexRouteImport } from './routes/models/index'
+import { Route as DefensesIndexRouteImport } from './routes/defenses/index'
+import { Route as ScenariosScenarioIdRouteImport } from './routes/scenarios/$scenarioId'
+import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
 
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
@@ -22,31 +28,110 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ScenariosIndexRoute = ScenariosIndexRouteImport.update({
+  id: '/scenarios/',
+  path: '/scenarios/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RunsIndexRoute = RunsIndexRouteImport.update({
+  id: '/runs/',
+  path: '/runs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ModelsIndexRoute = ModelsIndexRouteImport.update({
+  id: '/models/',
+  path: '/models/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DefensesIndexRoute = DefensesIndexRouteImport.update({
+  id: '/defenses/',
+  path: '/defenses/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScenariosScenarioIdRoute = ScenariosScenarioIdRouteImport.update({
+  id: '/scenarios/$scenarioId',
+  path: '/scenarios/$scenarioId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RunsRunIdRoute = RunsRunIdRouteImport.update({
+  id: '/runs/$runId',
+  path: '/runs/$runId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/runs/$runId': typeof RunsRunIdRoute
+  '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
+  '/defenses/': typeof DefensesIndexRoute
+  '/models/': typeof ModelsIndexRoute
+  '/runs/': typeof RunsIndexRoute
+  '/scenarios/': typeof ScenariosIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/runs/$runId': typeof RunsRunIdRoute
+  '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
+  '/defenses': typeof DefensesIndexRoute
+  '/models': typeof ModelsIndexRoute
+  '/runs': typeof RunsIndexRoute
+  '/scenarios': typeof ScenariosIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/runs/$runId': typeof RunsRunIdRoute
+  '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
+  '/defenses/': typeof DefensesIndexRoute
+  '/models/': typeof ModelsIndexRoute
+  '/runs/': typeof RunsIndexRoute
+  '/scenarios/': typeof ScenariosIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/runs/$runId'
+    | '/scenarios/$scenarioId'
+    | '/defenses/'
+    | '/models/'
+    | '/runs/'
+    | '/scenarios/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about'
-  id: '__root__' | '/' | '/about'
+  to:
+    | '/'
+    | '/about'
+    | '/runs/$runId'
+    | '/scenarios/$scenarioId'
+    | '/defenses'
+    | '/models'
+    | '/runs'
+    | '/scenarios'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/runs/$runId'
+    | '/scenarios/$scenarioId'
+    | '/defenses/'
+    | '/models/'
+    | '/runs/'
+    | '/scenarios/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  RunsRunIdRoute: typeof RunsRunIdRoute
+  ScenariosScenarioIdRoute: typeof ScenariosScenarioIdRoute
+  DefensesIndexRoute: typeof DefensesIndexRoute
+  ModelsIndexRoute: typeof ModelsIndexRoute
+  RunsIndexRoute: typeof RunsIndexRoute
+  ScenariosIndexRoute: typeof ScenariosIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -65,12 +150,60 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/scenarios/': {
+      id: '/scenarios/'
+      path: '/scenarios'
+      fullPath: '/scenarios/'
+      preLoaderRoute: typeof ScenariosIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/runs/': {
+      id: '/runs/'
+      path: '/runs'
+      fullPath: '/runs/'
+      preLoaderRoute: typeof RunsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/models/': {
+      id: '/models/'
+      path: '/models'
+      fullPath: '/models/'
+      preLoaderRoute: typeof ModelsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/defenses/': {
+      id: '/defenses/'
+      path: '/defenses'
+      fullPath: '/defenses/'
+      preLoaderRoute: typeof DefensesIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/scenarios/$scenarioId': {
+      id: '/scenarios/$scenarioId'
+      path: '/scenarios/$scenarioId'
+      fullPath: '/scenarios/$scenarioId'
+      preLoaderRoute: typeof ScenariosScenarioIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/runs/$runId': {
+      id: '/runs/$runId'
+      path: '/runs/$runId'
+      fullPath: '/runs/$runId'
+      preLoaderRoute: typeof RunsRunIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  RunsRunIdRoute: RunsRunIdRoute,
+  ScenariosScenarioIdRoute: ScenariosScenarioIdRoute,
+  DefensesIndexRoute: DefensesIndexRoute,
+  ModelsIndexRoute: ModelsIndexRoute,
+  RunsIndexRoute: RunsIndexRoute,
+  ScenariosIndexRoute: ScenariosIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

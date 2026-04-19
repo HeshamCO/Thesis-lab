@@ -1,92 +1,176 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { ActivityIcon, ArrowRightIcon } from "lucide-react";
+import { MetricCard } from "#/components/thesis/metric-card";
+import { PageHeading } from "#/components/thesis/page-heading";
+import { StatusBadge } from "#/components/thesis/status-badge";
+import { Button } from "#/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "#/components/ui/card";
+import { Progress } from "#/components/ui/progress";
+import {
+	Table,
+	TableBody,
+	TableCell,
+	TableHead,
+	TableHeader,
+	TableRow,
+} from "#/components/ui/table";
+import { api } from "#/lib/thesis/api";
+import { queryKeys } from "#/lib/thesis/query";
 
-export const Route = createFileRoute("/")({ component: App });
+export const Route = createFileRoute("/")({ component: DashboardPage });
 
-const STARTER_NOTES = [
-	{
-		title: "File routes",
-		description:
-			"Add pages in src/routes and TanStack Router keeps route types generated.",
-	},
-	{
-		title: "Root shell",
-		description:
-			"Shared metadata, styles, scripts, header, footer, and devtools live in __root.tsx.",
-	},
-	{
-		title: "Query context",
-		description:
-			"React Query is already connected to the router for SSR-aware data loading.",
-	},
-];
+function DashboardPage() {
+	const dashboard = useQuery({
+		queryKey: queryKeys.dashboard,
+		queryFn: api.dashboard,
+		refetchInterval: 3000,
+	});
+	const data = dashboard.data;
 
-function App() {
 	return (
-		<main className="mx-auto min-h-[calc(100vh-8rem)] max-w-5xl px-4 py-12">
-			<section className="max-w-3xl">
-				<p className="mb-3 text-sm font-semibold uppercase text-muted-foreground">
-					Fresh TanStack Start App
-				</p>
-				<h1 className="mb-5 text-4xl font-bold text-foreground sm:text-5xl">
-					Start with the application, not the demo.
-				</h1>
-				<p className="mb-8 text-lg leading-8 text-muted-foreground">
-					The template extras have been removed. What remains is a small
-					TanStack Start foundation with routing, SSR-aware query context,
-					Tailwind CSS, and a few reusable UI primitives.
-				</p>
-				<div className="flex flex-wrap gap-3">
-					<Link
-						to="/about"
-						className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground no-underline transition-colors hover:bg-primary/90"
-					>
-						Read the notes
-					</Link>
-					<a
-						href="https://tanstack.com/start"
-						target="_blank"
-						rel="noopener noreferrer"
-						className="rounded-md border border-border px-4 py-2 text-sm font-semibold text-foreground no-underline transition-colors hover:bg-muted"
-					>
-						TanStack Start
-					</a>
-				</div>
+		<>
+			<PageHeading
+				title="Experiment dashboard"
+				description="Monitor active work, recent results, and the research objects available for prompt-injection experiments."
+				action={
+					<Button asChild>
+						<Link to="/runs">
+							<ActivityIcon data-icon="inline-start" />
+							Start run
+						</Link>
+					</Button>
+				}
+			/>
+
+			<section className="grid gap-4 md:grid-cols-4">
+				<MetricCard
+					label="Scenarios"
+					value={data?.scenarioCount ?? "—"}
+					description="Benign tasks, attacker goals, corpus docs, and success steps."
+				/>
+				<MetricCard
+					label="Models"
+					value={data?.modelCount ?? "—"}
+					description="OpenAI-compatible endpoints referenced by role."
+				/>
+				<MetricCard
+					label="Defenses"
+					value={data?.defenseCount ?? "—"}
+					description="Prompt guards and retrieval filters ready for runs."
+				/>
+				<MetricCard
+					label="Runs"
+					value={data?.runCount ?? "—"}
+					description="Persisted attempts, logs, snapshots, and summaries."
+				/>
 			</section>
 
-			<section className="mt-12 grid gap-4 sm:grid-cols-3">
-				{STARTER_NOTES.map((note) => (
-					<article
-						key={note.title}
-						className="rounded-lg border border-border p-5"
-					>
-						<h2 className="mb-2 text-base font-semibold text-foreground">
-							{note.title}
-						</h2>
-						<p className="m-0 text-sm leading-6 text-muted-foreground">
-							{note.description}
+			<Card>
+				<CardHeader>
+					<CardTitle>Active run</CardTitle>
+					<CardDescription>
+						One active run is supported in v1 to keep checkpoint recovery
+						simple.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					{data?.activeRun ? (
+						<div className="flex flex-col gap-4">
+							<div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+								<div className="flex flex-col gap-1">
+									<div className="flex items-center gap-2">
+										<StatusBadge status={data.activeRun.status} />
+										<span className="font-medium">
+											{data.activeRun.scenarioName}
+										</span>
+									</div>
+									<p className="m-0 text-sm text-muted-foreground">
+										{data.activeRun.attackerModelName} attacking{" "}
+										{data.activeRun.benignModelName} with{" "}
+										{data.activeRun.defenseName}
+									</p>
+								</div>
+								<Button variant="outline" asChild>
+									<Link to="/runs/$runId" params={{ runId: data.activeRun.id }}>
+										Open run
+										<ArrowRightIcon data-icon="inline-end" />
+									</Link>
+								</Button>
+							</div>
+							<Progress
+								value={
+									data.activeRun.summary?.attemptsUsed
+										? (data.activeRun.summary.attemptsUsed /
+												data.activeRun.maxAttempts) *
+											100
+										: 0
+								}
+							/>
+						</div>
+					) : (
+						<p className="m-0 text-sm text-muted-foreground">
+							No active run. Start one from the runs workspace.
 						</p>
-					</article>
-				))}
-			</section>
+					)}
+				</CardContent>
+			</Card>
 
-			<section className="mt-12 rounded-lg border border-border bg-muted/30 p-5">
-				<h2 className="mb-3 text-base font-semibold text-foreground">
-					Next steps
-				</h2>
-				<ul className="m-0 list-disc space-y-2 pl-5 text-sm leading-6 text-muted-foreground">
-					<li>
-						Edit <code>src/routes/index.tsx</code> to customize the home page.
-					</li>
-					<li>
-						Update <code>src/components/Header.tsx</code> and{" "}
-						<code>src/components/Footer.tsx</code> for brand links.
-					</li>
-					<li>
-						Add routes in <code>src/routes</code> and tweak visual tokens in{" "}
-						<code>src/styles.css</code>.
-					</li>
-				</ul>
-			</section>
-		</main>
+			<Card>
+				<CardHeader>
+					<CardTitle>Recent runs</CardTitle>
+					<CardDescription>
+						Last persisted runs with final success and utility score when
+						available.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<Table>
+						<TableHeader>
+							<TableRow>
+								<TableHead>Scenario</TableHead>
+								<TableHead>Status</TableHead>
+								<TableHead>Attempts</TableHead>
+								<TableHead>Success</TableHead>
+								<TableHead>Utility</TableHead>
+								<TableHead />
+							</TableRow>
+						</TableHeader>
+						<TableBody>
+							{(data?.recentRuns ?? []).map((run) => (
+								<TableRow key={run.id}>
+									<TableCell>{run.scenarioName}</TableCell>
+									<TableCell>
+										<StatusBadge status={run.status} />
+									</TableCell>
+									<TableCell>
+										{run.summary?.attemptsUsed ?? 0}/{run.maxAttempts}
+									</TableCell>
+									<TableCell>
+										{run.summary ? String(run.summary.finalSuccess) : "—"}
+									</TableCell>
+									<TableCell>
+										{run.summary ? run.summary.utilityScore.toFixed(2) : "—"}
+									</TableCell>
+									<TableCell>
+										<Button variant="ghost" size="sm" asChild>
+											<Link to="/runs/$runId" params={{ runId: run.id }}>
+												View
+											</Link>
+										</Button>
+									</TableCell>
+								</TableRow>
+							))}
+						</TableBody>
+					</Table>
+				</CardContent>
+			</Card>
+		</>
 	);
 }
