@@ -38,7 +38,7 @@ function RunDetailPage() {
 	const run = useQuery({
 		queryKey: queryKeys.run(runId),
 		queryFn: () => api.run(runId),
-		refetchInterval: 5000,
+		// refetchInterval: 5000,
 	});
 	const pauseRun = useMutation({
 		mutationFn: () => api.pauseRun(runId),
