@@ -57,3 +57,13 @@ export const defenseConfigs = sqliteTable("defense_configs", {
 	createdAt: text("created_at").notNull(),
 	updatedAt: text("updated_at").notNull(),
 });
+
+export const attackerArtifacts = sqliteTable("attacker_artifacts", {
+	id: text("id").primaryKey(),
+	runId: text("run_id").notNull(),
+	attemptId: text("attempt_id").notNull(),
+	kind: text("kind").notNull(),
+	title: text("title").notNull(),
+	content: text("content").notNull(),
+	createdAt: text("created_at").notNull(),
+});

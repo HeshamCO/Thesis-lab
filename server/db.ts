@@ -3,6 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { computeRunSummary, isFullAttackSuccess } from '../src/lib/thesis/evaluation';
 import type {
+	AttackerArtifact,
+	AttackerArtifactKind,
 	AttemptRecord,
 	AttemptStatus,
 	DefenseConfig,
@@ -64,6 +66,9 @@ export type CreateAttemptInput = {
 	injectionPrompt: string;
 	injectedDocument: string;
 	rationale: string;
+	rawAttackerOutput: string;
+	rawAttackerParseOk: boolean;
+	attackDurationMs: number;
 };
 
 export type CompleteAttemptInput = {
@@ -75,6 +80,9 @@ export type CompleteAttemptInput = {
 	utilityScore: number;
 	status: AttemptStatus;
 	error?: string;
+	benignDurationMs: number;
+	totalDurationMs: number;
+	defenseFilteredCount: number;
 };
 
 export type CreateStepResultInput = {
@@ -86,6 +94,16 @@ export type CreateStepResultInput = {
 	score: number;
 	evaluatorOutput: string;
 	evidence: string;
+	rawJudgeOutput?: string;
+	rawJudgeParseOk?: boolean;
+};
+
+export type CreateAttackerArtifactInput = {
+	runId: string;
+	attemptId: string;
+	kind: AttackerArtifactKind;
+	title: string;
+	content: string;
 };
 
 export class ThesisDb {
@@ -196,6 +214,12 @@ export class ThesisDb {
 				success INTEGER NOT NULL,
 				utility_score REAL NOT NULL,
 				error TEXT NOT NULL,
+				raw_attacker_output TEXT NOT NULL DEFAULT '',
+				raw_attacker_parse_ok INTEGER NOT NULL DEFAULT 1,
+				attack_duration_ms INTEGER NOT NULL DEFAULT 0,
+				benign_duration_ms INTEGER NOT NULL DEFAULT 0,
+				total_duration_ms INTEGER NOT NULL DEFAULT 0,
+				defense_filtered_count INTEGER NOT NULL DEFAULT 0,
 				created_at TEXT NOT NULL,
 				completed_at TEXT
 			);
@@ -210,6 +234,8 @@ export class ThesisDb {
 				score REAL NOT NULL,
 				evaluator_output TEXT NOT NULL,
 				evidence TEXT NOT NULL,
+				raw_judge_output TEXT NOT NULL DEFAULT '',
+				raw_judge_parse_ok INTEGER NOT NULL DEFAULT 1,
 				created_at TEXT NOT NULL
 			);
 
@@ -233,6 +259,19 @@ export class ThesisDb {
 				created_at TEXT NOT NULL
 			);
 
+			CREATE TABLE IF NOT EXISTS attacker_artifacts (
+				id TEXT PRIMARY KEY,
+				run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
+				attempt_id TEXT NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+				kind TEXT NOT NULL,
+				title TEXT NOT NULL,
+				content TEXT NOT NULL,
+				created_at TEXT NOT NULL
+			);
+
+			CREATE INDEX IF NOT EXISTS idx_attacker_artifacts_run ON attacker_artifacts(run_id);
+			CREATE INDEX IF NOT EXISTS idx_attacker_artifacts_attempt ON attacker_artifacts(attempt_id);
+
 			CREATE VIRTUAL TABLE IF NOT EXISTS rag_documents_fts USING fts5(
 				id UNINDEXED,
 				run_id UNINDEXED,
@@ -241,6 +280,23 @@ export class ThesisDb {
 				source
 			);
 		`);
+
+		this.addColumnIfMissing('attempts', 'raw_attacker_output', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'raw_attacker_parse_ok', 'INTEGER NOT NULL DEFAULT 1');
+		this.addColumnIfMissing('attempts', 'attack_duration_ms', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('attempts', 'benign_duration_ms', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('attempts', 'total_duration_ms', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('attempts', 'defense_filtered_count', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('step_results', 'raw_judge_output', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('step_results', 'raw_judge_parse_ok', 'INTEGER NOT NULL DEFAULT 1');
+	}
+
+	private addColumnIfMissing(table: string, column: string, definition: string) {
+		const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+		if (columns.some((info) => info.name === column)) {
+			return;
+		}
+		this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 	}
 
 	seed() {
@@ -572,6 +628,7 @@ export class ThesisDb {
 		const attempts = this.listAttempts(runId);
 		const stepResults = this.listStepResults(runId);
 		const logs = this.listLogs(runId);
+		const attackerArtifacts = this.listAttackerArtifacts(runId);
 		return {
 			...this.hydrateRunListItem(row),
 			scenarioSnapshot: parseJson(row.scenario_snapshot, {} as Scenario),
@@ -582,6 +639,7 @@ export class ThesisDb {
 			attempts,
 			stepResults,
 			logs,
+			attackerArtifacts,
 		};
 	}
 
@@ -624,8 +682,10 @@ export class ThesisDb {
 				`INSERT INTO attempts
 				(id, run_id, attempt_number, status, injection_prompt, injected_document,
 				rationale, retrieved_context, benign_response, feedback, success,
-				utility_score, error, created_at, completed_at)
-				VALUES (?, ?, ?, 'running', ?, ?, ?, '[]', '', '', 0, 0, '', ?, NULL)`,
+				utility_score, error, raw_attacker_output, raw_attacker_parse_ok,
+				attack_duration_ms, benign_duration_ms, total_duration_ms,
+				defense_filtered_count, created_at, completed_at)
+				VALUES (?, ?, ?, 'running', ?, ?, ?, '[]', '', '', 0, 0, '', ?, ?, ?, 0, 0, 0, ?, NULL)`,
 			)
 			.run(
 				attemptId,
@@ -634,6 +694,9 @@ export class ThesisDb {
 				input.injectionPrompt,
 				input.injectedDocument,
 				input.rationale,
+				input.rawAttackerOutput,
+				input.rawAttackerParseOk ? 1 : 0,
+				input.attackDurationMs,
 				timestamp,
 			);
 		this.insertRagDocument({
@@ -643,6 +706,13 @@ export class ThesisDb {
 			title: `Attempt ${input.attemptNumber} injection`,
 			content: input.injectedDocument,
 		});
+		this.recordAttackerArtifacts(input.runId, attemptId, input.attemptNumber, {
+			injectionPrompt: input.injectionPrompt,
+			injectedDocument: input.injectedDocument,
+			rationale: input.rationale,
+			rawOutput: input.rawAttackerOutput,
+			rawOutputParseOk: input.rawAttackerParseOk,
+		});
 		return this.getAttempt(attemptId);
 	}
 
@@ -650,7 +720,9 @@ export class ThesisDb {
 		this.db
 			.prepare(
 				`UPDATE attempts SET status = ?, retrieved_context = ?, benign_response = ?,
-				feedback = ?, success = ?, utility_score = ?, error = ?, completed_at = ?
+				feedback = ?, success = ?, utility_score = ?, error = ?,
+				benign_duration_ms = ?, total_duration_ms = ?, defense_filtered_count = ?,
+				completed_at = ?
 				WHERE id = ?`,
 			)
 			.run(
@@ -661,6 +733,9 @@ export class ThesisDb {
 				input.success ? 1 : 0,
 				input.utilityScore,
 				input.error ?? '',
+				input.benignDurationMs,
+				input.totalDurationMs,
+				input.defenseFilteredCount,
 				now(),
 				input.attemptId,
 			);
@@ -673,8 +748,8 @@ export class ThesisDb {
 			.prepare(
 				`INSERT INTO step_results
 				(id, run_id, attempt_id, order_index, step_snapshot, passed, score,
-				evaluator_output, evidence, created_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				evaluator_output, evidence, raw_judge_output, raw_judge_parse_ok, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				resultId,
@@ -686,10 +761,86 @@ export class ThesisDb {
 				input.score,
 				input.evaluatorOutput,
 				input.evidence,
+				input.rawJudgeOutput ?? '',
+				input.rawJudgeParseOk === false ? 0 : 1,
 				now(),
 			);
 		const row = this.db.prepare('SELECT * FROM step_results WHERE id = ?').get(resultId) as SqlRow;
 		return this.hydrateStepResult(row);
+	}
+
+	createAttackerArtifact(input: CreateAttackerArtifactInput): AttackerArtifact {
+		const artifactId = id('artifact');
+		const timestamp = now();
+		this.db
+			.prepare(
+				`INSERT INTO attacker_artifacts
+				(id, run_id, attempt_id, kind, title, content, created_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			)
+			.run(artifactId, input.runId, input.attemptId, input.kind, input.title, input.content, timestamp);
+		const row = this.db.prepare('SELECT * FROM attacker_artifacts WHERE id = ?').get(artifactId) as SqlRow;
+		return this.hydrateArtifact(row);
+	}
+
+	listAttackerArtifacts(runId: string): AttackerArtifact[] {
+		return this.db
+			.prepare('SELECT * FROM attacker_artifacts WHERE run_id = ? ORDER BY created_at ASC')
+			.all(runId)
+			.map((row) => this.hydrateArtifact(row as SqlRow));
+	}
+
+	getAttackerArtifact(artifactId: string): AttackerArtifact | null {
+		const row = this.db
+			.prepare('SELECT * FROM attacker_artifacts WHERE id = ?')
+			.get(artifactId) as SqlRow | undefined;
+		return row ? this.hydrateArtifact(row) : null;
+	}
+
+	private recordAttackerArtifacts(
+		runId: string,
+		attemptId: string,
+		attemptNumber: number,
+		input: {
+			injectionPrompt: string;
+			injectedDocument: string;
+			rationale: string;
+			rawOutput: string;
+			rawOutputParseOk: boolean;
+		},
+	) {
+		this.createAttackerArtifact({
+			runId,
+			attemptId,
+			kind: 'injection_prompt',
+			title: `Attempt ${attemptNumber} injection prompt`,
+			content: input.injectionPrompt,
+		});
+		this.createAttackerArtifact({
+			runId,
+			attemptId,
+			kind: 'injected_document',
+			title: `Attempt ${attemptNumber} injected document`,
+			content: input.injectedDocument,
+		});
+		if (input.rationale) {
+			this.createAttackerArtifact({
+				runId,
+				attemptId,
+				kind: 'rationale',
+				title: `Attempt ${attemptNumber} attacker rationale`,
+				content: input.rationale,
+			});
+		}
+		if (input.rawOutput) {
+			this.createAttackerArtifact({
+				runId,
+				attemptId,
+				kind: 'raw_output',
+				title: `Attempt ${attemptNumber} raw attacker output${input.rawOutputParseOk ? '' : ' (parse failed)'}`,
+				content: input.rawOutput,
+			});
+		}
 	}
 
 	addLog(
@@ -951,6 +1102,12 @@ export class ThesisDb {
 			success: bool(row.success),
 			utilityScore: Number(row.utility_score),
 			error: String(row.error),
+			rawAttackerOutput: String(row.raw_attacker_output ?? ''),
+			rawAttackerParseOk: bool(row.raw_attacker_parse_ok ?? 1),
+			attackDurationMs: Number(row.attack_duration_ms ?? 0),
+			benignDurationMs: Number(row.benign_duration_ms ?? 0),
+			totalDurationMs: Number(row.total_duration_ms ?? 0),
+			defenseFilteredCount: Number(row.defense_filtered_count ?? 0),
 			createdAt: String(row.created_at),
 			completedAt: row.completed_at ? String(row.completed_at) : null,
 		};
@@ -966,6 +1123,20 @@ export class ThesisDb {
 			score: Number(row.score),
 			evaluatorOutput: String(row.evaluator_output),
 			evidence: String(row.evidence),
+			rawJudgeOutput: String(row.raw_judge_output ?? ''),
+			rawJudgeParseOk: bool(row.raw_judge_parse_ok ?? 1),
+			createdAt: String(row.created_at),
+		};
+	}
+
+	private hydrateArtifact(row: SqlRow): AttackerArtifact {
+		return {
+			id: String(row.id),
+			runId: String(row.run_id),
+			attemptId: String(row.attempt_id),
+			kind: row.kind as AttackerArtifactKind,
+			title: String(row.title),
+			content: String(row.content),
 			createdAt: String(row.created_at),
 		};
 	}

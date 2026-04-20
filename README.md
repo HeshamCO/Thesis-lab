@@ -95,13 +95,13 @@ Ollama does not require a real API key. If `OLLAMA_API_KEY` is missing, the work
 
 ## Example Scenario Seed
 
-Create 50 example scenarios with seed documents and ordered success steps:
+Seed a hand-authored catalog of realistic indirect-prompt-injection scenarios grouped by attack family (RAG content poisoning with authority spoofing, tool-call hijacking, markdown-image exfiltration, fake `<system>` note overrides, role swap, multi-document priming, unicode/zero-width smuggling, citation confusion, defense-aware injection, and refusal evasion via partial compliance):
 
 ```bash
 bun --bun run seed:scenarios
 ```
 
-The seed is idempotent. It creates missing examples and skips examples that already exist by name, so running it more than once will not duplicate the same 50 examples.
+The seed is idempotent. It creates missing scenarios and skips ones that already exist by name, so running it more than once does not duplicate them. Each scenario uses domain-plausible prose for both seed documents and the attack, and pairs the attack with an evaluator targeted at the specific signal that family produces (regex for structured payloads, `llm_judge` for behavior-shaped outcomes).
 
 ## App Areas
 
@@ -216,13 +216,50 @@ The run detail page shows persisted execution data.
 - `Benign response`: Output from the benign model after retrieval and defense handling.
 - `Attacker feedback`: Structured failure feedback sent to the attacker before the next attempt.
 - `Step results`: Per-step pass/fail, score, evaluator output, and evidence.
+- `Raw attacker output`: Unparsed text the attacker model returned. Stored even when JSON parsing fails so failures are debuggable.
+- `Raw judge output`: Unparsed text the LLM judge returned for `llm_judge` steps.
+- `Phase timings`: Per-attempt `attackDurationMs`, `benignDurationMs`, `totalDurationMs`.
+- `Defense filtered count`: Number of retrieved documents the defense dropped on this attempt.
 - `Persistent logs`: Chronological worker events for debugging and reproducibility.
+
+### Attacker Artifacts
+
+Each attempt records typed attacker artifacts that are individually addressable in the UI and via API:
+
+- `injection_prompt` — the attacker's strategy/instruction text.
+- `injected_document` — the document inserted into the run-isolated RAG store.
+- `rationale` — the attacker's stated rationale for this attempt.
+- `raw_output` — the unparsed model output (only present when the attacker model produced text).
+
+API: `GET /api/runs/:runId/attempts/:attemptId` returns the attempt with its step results, artifacts, and per-attempt logs. `GET /api/runs/:runId/attempts/:attemptId/artifacts/:artifactId` returns a single artifact.
+
+### Log Event Vocabulary
+
+The engine emits these typed events in `run_logs`. Filter by `eventType` in the Logs tab or in offline analysis.
+
+- `run.started`, `run.paused`, `run.resume`, `run.completed`, `run.failed`, `run.recovered`, `run.created`, `run.pause_requested`.
+- `attempt.started`, `attempt.completed` — attempt boundaries with timings.
+- `attack.generated` — duration, raw output length, parse success, injection-prompt preview.
+- `retrieval.queried` — query, topK, ranked documents with source (scenario vs attacker).
+- `defense.applied` — mode, kept/dropped counts, dropped docs with the matched pattern.
+- `benign.responded` — duration, response length, defensive-prompt application.
+- `judge.evaluated` — per LLM-judge step: parse success, raw output length, score.
+- `feedback.built` — failed-step count and the names of failed required steps.
+
+### Reading a Run
+
+The run detail page is organized into four tabs:
+
+1. **Overview** — health snapshot: status, attempts used, final success, utility, total/average durations, defense-filter hit rate, parse-failure counts.
+2. **Tree** — collapsible tree per attempt: attacker → retrieval → defense → benign → step verdicts → feedback. Click any leaf to open a slide-over with the full content. Failed attempts show a "why" caption derived from the first failed required step.
+3. **Artifacts** — flat searchable table of every attacker artifact and retrieved document. Use it to compare what the attacker produced across attempts.
+4. **Logs** — filterable event stream. Click a row to expand its JSON payload. Copy the filtered set as JSONL for offline analysis. Useful filters: `event=defense.applied` (which docs were filtered and why), `event=attack.generated` with `level=warn` (attacker parse failures), `event=judge.evaluated` (judge agreement and parse outcomes).
 
 ### Export Fields
 
-Use JSON when you need the complete run record, including snapshots, prompts, retrieved context, logs, attempts, and step results.
+Use JSON when you need the complete run record, including snapshots, prompts, retrieved context, logs, attempts, attacker artifacts, raw outputs, and per-phase durations.
 
-Use CSV when you need spreadsheet-friendly rows for attempts and success-step results.
+Use CSV when you need spreadsheet-friendly rows for attempts and success-step results. Each row carries: scenario name, defense name and mode, attempt durations (attack/benign/total), defense-filtered count, attacker parse-success flag, step name/required/passed/score, evaluator type, evaluator output, and judge parse-success flag.
 
 ## Verification
 

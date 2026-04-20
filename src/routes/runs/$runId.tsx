@@ -1,18 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DownloadIcon, PauseIcon, PlayIcon } from "lucide-react";
+import { useState } from "react";
 import { toast } from "sonner";
+import { ArtifactPanel, type ArtifactPanelPayload } from "#/components/thesis/artifact-panel";
+import { HelpDrawer } from "#/components/thesis/help-drawer";
 import { MetricCard } from "#/components/thesis/metric-card";
 import { PageHeading } from "#/components/thesis/page-heading";
+import { RunArtifacts } from "#/components/thesis/run-artifacts";
+import { RunLogs } from "#/components/thesis/run-logs";
+import { RunTree } from "#/components/thesis/run-tree";
 import { StatusBadge } from "#/components/thesis/status-badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
 import { Progress } from "#/components/ui/progress";
-import { Separator } from "#/components/ui/separator";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useRunSocket } from "#/hooks/use-run-socket";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
+import { computeRunStats, formatDurationMs, formatPercent } from "#/lib/thesis/run-stats";
+import type { RunDetail } from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/runs/$runId")({
 	component: RunDetailPage,
@@ -25,7 +32,6 @@ function RunDetailPage() {
 	const run = useQuery({
 		queryKey: queryKeys.run(runId),
 		queryFn: () => api.run(runId),
-		// refetchInterval: 5000,
 	});
 	const pauseRun = useMutation({
 		mutationFn: () => api.pauseRun(runId),
@@ -43,6 +49,7 @@ function RunDetailPage() {
 		},
 		onError: (error) => toast.error(error.message),
 	});
+	const [panel, setPanel] = useState<ArtifactPanelPayload | null>(null);
 
 	if (!run.data) {
 		return <PageHeading title="Run" description="Loading the selected run, attempts, step results, and logs." />;
@@ -59,7 +66,8 @@ function RunDetailPage() {
 				title={detail.scenarioName}
 				description={`${detail.attackerModelName} → ${detail.benignModelName} under ${detail.defenseName}`}
 				action={
-					<div className="flex flex-wrap gap-2">
+					<div className="flex flex-wrap items-center gap-2">
+						<HelpDrawer />
 						<Button variant="outline" asChild>
 							<a href={`/api/runs/${detail.id}/export.json`}>
 								<DownloadIcon data-icon="inline-start" />
@@ -88,6 +96,71 @@ function RunDetailPage() {
 				}
 			/>
 
+			<Tabs defaultValue="tree" className="gap-4">
+				<TabsList>
+					<TabsTrigger value="overview">Overview</TabsTrigger>
+					<TabsTrigger value="tree">Tree</TabsTrigger>
+					<TabsTrigger value="artifacts">Artifacts</TabsTrigger>
+					<TabsTrigger value="logs">Logs</TabsTrigger>
+				</TabsList>
+
+				<TabsContent value="overview" className="flex flex-col gap-4">
+					<OverviewTab detail={detail} progress={progress} />
+				</TabsContent>
+
+				<TabsContent value="tree" className="flex flex-col gap-3">
+					<Card>
+						<CardHeader>
+							<CardTitle>Attempt tree</CardTitle>
+							<CardDescription>
+								Trace each attempt through attacker → retrieval → defense → benign → step verdicts → feedback. Click any
+								leaf to open its full content.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<RunTree detail={detail} onSelect={setPanel} />
+						</CardContent>
+					</Card>
+				</TabsContent>
+
+				<TabsContent value="artifacts">
+					<Card>
+						<CardHeader>
+							<CardTitle>Artifacts</CardTitle>
+							<CardDescription>
+								Every attacker artifact and retrieved document for this run, sorted by time created.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<RunArtifacts detail={detail} onSelect={setPanel} />
+						</CardContent>
+					</Card>
+				</TabsContent>
+
+				<TabsContent value="logs">
+					<Card>
+						<CardHeader>
+							<CardTitle>Persistent logs</CardTitle>
+							<CardDescription>
+								Chronological worker events captured for reproducibility. Filter and expand payloads for analysis.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<RunLogs logs={detail.logs} />
+						</CardContent>
+					</Card>
+				</TabsContent>
+			</Tabs>
+
+			<ArtifactPanel payload={panel} onClose={() => setPanel(null)} />
+		</>
+	);
+}
+
+function OverviewTab({ detail, progress }: { detail: RunDetail; progress: number }) {
+	const stats = computeRunStats(detail);
+	return (
+		<>
 			<section className="grid gap-4 md:grid-cols-4">
 				<MetricCard
 					label="Status"
@@ -131,99 +204,28 @@ function RunDetailPage() {
 				</CardContent>
 			</Card>
 
-			<Card>
-				<CardHeader>
-					<CardTitle>Attempts</CardTitle>
-					<CardDescription>
-						Generated attack artifacts, retrieved context, benign response, and feedback for the next loop.
-					</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-5">
-					{detail.attempts.map((attempt) => {
-						const stepResults = detail.stepResults.filter((step) => step.attemptId === attempt.id);
-						return (
-							<div key={attempt.id} className="flex flex-col gap-3 rounded-lg border p-4">
-								<div className="flex flex-wrap items-center justify-between gap-3">
-									<div>
-										<h2 className="m-0 text-base font-semibold">Attempt {attempt.attemptNumber}</h2>
-										<p className="m-0 text-sm text-muted-foreground">
-											{attempt.status} · success {String(attempt.success)} · utility {attempt.utilityScore.toFixed(2)}
-										</p>
-									</div>
-									<StatusBadge status={attempt.status} />
-								</div>
-								<Separator />
-								<TextBlock title="Injection prompt" value={attempt.injectionPrompt} />
-								<TextBlock title="Injected document" value={attempt.injectedDocument} />
-								<TextBlock title="Benign response" value={attempt.benignResponse} />
-								<TextBlock title="Attacker feedback" value={attempt.feedback} />
-								<Table>
-									<TableHeader>
-										<TableRow>
-											<TableHead>Step</TableHead>
-											<TableHead>Passed</TableHead>
-											<TableHead>Score</TableHead>
-											<TableHead>Output</TableHead>
-										</TableRow>
-									</TableHeader>
-									<TableBody>
-										{stepResults.map((step) => (
-											<TableRow key={step.id}>
-												<TableCell>{step.stepSnapshot.name}</TableCell>
-												<TableCell>{String(step.passed)}</TableCell>
-												<TableCell>{step.score.toFixed(2)}</TableCell>
-												<TableCell>{step.evaluatorOutput}</TableCell>
-											</TableRow>
-										))}
-									</TableBody>
-								</Table>
-							</div>
-						);
-					})}
-				</CardContent>
-			</Card>
-
-			<Card>
-				<CardHeader>
-					<CardTitle>Persistent logs</CardTitle>
-					<CardDescription>Chronological worker events captured for reproducibility.</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Time</TableHead>
-								<TableHead>Level</TableHead>
-								<TableHead>Event</TableHead>
-								<TableHead>Message</TableHead>
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{detail.logs.map((log) => (
-								<TableRow key={log.id}>
-									<TableCell>{new Date(log.createdAt).toLocaleTimeString()}</TableCell>
-									<TableCell>{log.level}</TableCell>
-									<TableCell>{log.eventType}</TableCell>
-									<TableCell>{log.message}</TableCell>
-								</TableRow>
-							))}
-						</TableBody>
-					</Table>
-				</CardContent>
-			</Card>
+			<section className="grid gap-4 md:grid-cols-4">
+				<MetricCard
+					label="Total run duration"
+					value={formatDurationMs(stats.totalDurationMs)}
+					description="Sum of completed attempt durations."
+				/>
+				<MetricCard
+					label="Avg attempt"
+					value={formatDurationMs(stats.avgAttemptDurationMs)}
+					description={`attack ${formatDurationMs(stats.avgAttackDurationMs)} · benign ${formatDurationMs(stats.avgBenignDurationMs)}`}
+				/>
+				<MetricCard
+					label="Defense filter hit rate"
+					value={formatPercent(stats.defenseFilterHitRate)}
+					description={`${stats.defenseFilteredCount} document(s) filtered across ${stats.completedAttempts} attempt(s).`}
+				/>
+				<MetricCard
+					label="Parse failures"
+					value={`${stats.attackerParseFailures} / ${stats.judgeParseFailures}`}
+					description="Attacker JSON / LLM judge JSON parse failures. Filter logs by warn level for raw outputs."
+				/>
+			</section>
 		</>
-	);
-}
-
-function TextBlock({ title, value }: { title: string; value: string }) {
-	if (!value) {
-		return null;
-	}
-
-	return (
-		<div className="flex flex-col gap-1">
-			<h3 className="m-0 text-sm font-medium">{title}</h3>
-			<pre className="m-0 max-h-48 overflow-auto rounded-md bg-muted p-3 text-sm whitespace-pre-wrap">{value}</pre>
-		</div>
 	);
 }

@@ -150,6 +150,12 @@ export type AttemptRecord = {
 	success: boolean;
 	utilityScore: number;
 	error: string;
+	rawAttackerOutput: string;
+	rawAttackerParseOk: boolean;
+	attackDurationMs: number;
+	benignDurationMs: number;
+	totalDurationMs: number;
+	defenseFilteredCount: number;
 	createdAt: string;
 	completedAt: string | null;
 };
@@ -163,6 +169,22 @@ export type StepResultRecord = {
 	score: number;
 	evaluatorOutput: string;
 	evidence: string;
+	rawJudgeOutput: string;
+	rawJudgeParseOk: boolean;
+	createdAt: string;
+};
+
+export const ATTACKER_ARTIFACT_KINDS = ["injection_prompt", "injected_document", "rationale", "raw_output"] as const;
+
+export type AttackerArtifactKind = (typeof ATTACKER_ARTIFACT_KINDS)[number];
+
+export type AttackerArtifact = {
+	id: string;
+	runId: string;
+	attemptId: string;
+	kind: AttackerArtifactKind;
+	title: string;
+	content: string;
 	createdAt: string;
 };
 
@@ -185,4 +207,5 @@ export type RunDetail = RunListItem & {
 	attempts: AttemptRecord[];
 	stepResults: StepResultRecord[];
 	logs: RunLogRecord[];
+	attackerArtifacts: AttackerArtifact[];
 };

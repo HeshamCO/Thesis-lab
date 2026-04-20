@@ -162,6 +162,41 @@ app.get("/api/runs/:id", (request, response) => {
 	response.json(thesisDb.getRun(request.params.id));
 });
 
+app.get("/api/runs/:id/attempts/:attemptId", (request, response) => {
+	const run = thesisDb.getRun(request.params.id);
+	const attempt = run.attempts.find((item) => item.id === request.params.attemptId);
+	if (!attempt) {
+		response.status(404).json({ error: "Attempt not found." });
+		return;
+	}
+	const stepResults = run.stepResults.filter(
+		(result) => result.attemptId === attempt.id,
+	);
+	const artifacts = run.attackerArtifacts.filter(
+		(artifact) => artifact.attemptId === attempt.id,
+	);
+	const logs = run.logs.filter(
+		(log) => (log.payload as { attemptNumber?: number })?.attemptNumber === attempt.attemptNumber,
+	);
+	response.json({ attempt, stepResults, artifacts, logs });
+});
+
+app.get(
+	"/api/runs/:id/attempts/:attemptId/artifacts/:artifactId",
+	(request, response) => {
+		const artifact = thesisDb.getAttackerArtifact(request.params.artifactId);
+		if (
+			!artifact ||
+			artifact.runId !== request.params.id ||
+			artifact.attemptId !== request.params.attemptId
+		) {
+			response.status(404).json({ error: "Artifact not found." });
+			return;
+		}
+		response.json(artifact);
+	},
+);
+
 app.post("/api/runs/:id/pause", (request, response) => {
 	thesisDb.requestPause(request.params.id);
 	response.json(thesisDb.getRun(request.params.id));
@@ -186,44 +221,61 @@ app.get("/api/runs/:id/export.csv", (request, response) => {
 	const rows = [
 		[
 			"runId",
+			"scenarioName",
+			"defenseName",
+			"defenseMode",
 			"attemptNumber",
+			"attemptStatus",
 			"attemptSuccess",
 			"utilityScore",
+			"attackDurationMs",
+			"benignDurationMs",
+			"totalDurationMs",
+			"defenseFilteredCount",
+			"rawAttackerParseOk",
 			"stepOrder",
 			"stepName",
+			"stepRequired",
 			"stepPassed",
 			"stepScore",
+			"evaluatorType",
 			"evaluatorOutput",
+			"rawJudgeParseOk",
 		],
 	];
 	for (const attempt of run.attempts) {
 		const attemptSteps = run.stepResults.filter(
 			(result) => result.attemptId === attempt.id,
 		);
+		const baseRow = [
+			run.id,
+			run.scenarioName,
+			run.defenseName,
+			run.defenseSnapshot.mode,
+			String(attempt.attemptNumber),
+			attempt.status,
+			String(attempt.success),
+			String(attempt.utilityScore),
+			String(attempt.attackDurationMs),
+			String(attempt.benignDurationMs),
+			String(attempt.totalDurationMs),
+			String(attempt.defenseFilteredCount),
+			String(attempt.rawAttackerParseOk),
+		];
 		if (attemptSteps.length === 0) {
-			rows.push([
-				run.id,
-				String(attempt.attemptNumber),
-				String(attempt.success),
-				String(attempt.utilityScore),
-				"",
-				"",
-				"",
-				"",
-				"",
-			]);
+			rows.push([...baseRow, "", "", "", "", "", "", "", ""]);
 		}
 		for (const step of attemptSteps) {
 			rows.push([
-				run.id,
-				String(attempt.attemptNumber),
-				String(attempt.success),
-				String(attempt.utilityScore),
+				...baseRow,
 				String(step.orderIndex),
 				step.stepSnapshot.name,
+				String(step.stepSnapshot.required),
 				String(step.passed),
 				String(step.score),
+				step.stepSnapshot.evaluatorType,
 				step.evaluatorOutput,
+				String(step.rawJudgeParseOk),
 			]);
 		}
 	}

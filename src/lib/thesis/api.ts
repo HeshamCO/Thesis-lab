@@ -1,4 +1,6 @@
 import type {
+	AttackerArtifact,
+	AttemptRecord,
 	DefenseConfig,
 	DefenseConfigInput,
 	ModelConfig,
@@ -6,10 +8,19 @@ import type {
 	ModelConfigInput,
 	RunDetail,
 	RunListItem,
+	RunLogRecord,
 	Scenario,
 	ScenarioInput,
 	StartRunInput,
+	StepResultRecord,
 } from "./schemas";
+
+export type AttemptDetail = {
+	attempt: AttemptRecord;
+	stepResults: StepResultRecord[];
+	artifacts: AttackerArtifact[];
+	logs: RunLogRecord[];
+};
 
 type DashboardData = {
 	activeRun?: RunListItem;
@@ -95,4 +106,7 @@ export const api = {
 		}),
 	pauseRun: (id: string) => request<RunDetail>(`/api/runs/${id}/pause`, { method: "POST" }),
 	resumeRun: (id: string) => request<RunDetail>(`/api/runs/${id}/resume`, { method: "POST" }),
+	attempt: (runId: string, attemptId: string) => request<AttemptDetail>(`/api/runs/${runId}/attempts/${attemptId}`),
+	artifact: (runId: string, attemptId: string, artifactId: string) =>
+		request<AttackerArtifact>(`/api/runs/${runId}/attempts/${attemptId}/artifacts/${artifactId}`),
 };
