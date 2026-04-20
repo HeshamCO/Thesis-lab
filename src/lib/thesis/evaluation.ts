@@ -1,4 +1,8 @@
-import type { SuccessStepInput, ToolCallRecord } from "./schemas";
+import type { DefenseConfig, SuccessStepInput, ToolCallRecord } from "./schemas";
+
+export function defenseAppliesPromptGuard(defense: Pick<DefenseConfig, "mode">): boolean {
+	return defense.mode === "prompt_guard" || defense.mode === "combined";
+}
 
 export type EvaluationInput = {
 	step: SuccessStepInput;

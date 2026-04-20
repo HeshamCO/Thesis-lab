@@ -113,13 +113,6 @@ function RunDetailPage() {
 				<TabsContent value="tree" className="flex flex-col gap-3">
 					<div className="flex flex-col gap-1">
 						<h2 className="m-0 text-base font-semibold">Attempt walkthrough</h2>
-						<p className="m-0 text-sm text-muted-foreground">
-							Read each attempt as a 6-step story: attacker → retrieval → defense → benign response → step verdicts →
-							feedback. Use the timeline or
-							<kbd className="mx-1 rounded bg-muted px-1 font-mono text-[10px]">j</kbd>/
-							<kbd className="mx-1 rounded bg-muted px-1 font-mono text-[10px]">k</kbd>
-							to step between attempts.
-						</p>
 					</div>
 					<RunTree detail={detail} onSelect={setPanel} />
 				</TabsContent>

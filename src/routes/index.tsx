@@ -17,7 +17,6 @@ function DashboardPage() {
 	const dashboard = useQuery({
 		queryKey: queryKeys.dashboard,
 		queryFn: api.dashboard,
-		refetchInterval: 3000,
 	});
 	const data = dashboard.data;
 

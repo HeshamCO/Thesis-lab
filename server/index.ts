@@ -136,13 +136,23 @@ app.get("/api/runs", (_request, response) => {
 
 app.post("/api/runs", (request, response) => {
 	const input = startRunInputSchema.parse(request.body);
+	console.log("input ==> ",input);
+	
 	const scenario = thesisDb.getScenario(input.scenarioId);
 	const defense = thesisDb.getDefense(input.defenseConfigId);
 	const attackerModel = thesisDb.getModel(input.attackerModelId);
 	const benignModel = thesisDb.getModel(input.benignModelId);
+	const judgeModel = input.judgeModelId
+		? thesisDb.getModel(input.judgeModelId)
+		: null;
 
 	if (!scenario || !defense || !attackerModel || !benignModel) {
 		response.status(400).json({ error: "Selected scenario, model, or defense was not found." });
+		return;
+	}
+
+	if (input.judgeModelId && !judgeModel) {
+		response.status(400).json({ error: "Selected judge model was not found." });
 		return;
 	}
 
@@ -151,8 +161,14 @@ app.post("/api/runs", (request, response) => {
 		defense,
 		attackerModel,
 		benignModel,
+		judgeModel,
 		maxAttempts: input.maxAttempts,
 		retrievalSettings: input.retrievalSettings,
+		attackerPromptVersion: input.attackerPromptVersion,
+		benignPromptVersion: input.benignPromptVersion,
+		judgePromptVersion: input.judgePromptVersion,
+		benignTaskHasSafetyClause: input.benignTaskHasSafetyClause,
+		labelRetrievedDocuments: input.labelRetrievedDocuments,
 	});
 	engine.start(run.id);
 	response.status(201).json(run);

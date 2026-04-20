@@ -2,6 +2,11 @@ import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { computeRunSummary, isFullAttackSuccess } from '../src/lib/thesis/evaluation';
+import {
+	DEFAULT_ATTACKER_PROMPT_ID,
+	DEFAULT_BENIGN_PROMPT_ID,
+	DEFAULT_JUDGE_PROMPT_ID,
+} from './prompts';
 import type {
 	AttackerArtifact,
 	AttackerArtifactKind,
@@ -322,6 +327,15 @@ export class ThesisDb {
 		this.addColumnIfMissing('step_results', 'raw_judge_output', "TEXT NOT NULL DEFAULT ''");
 		this.addColumnIfMissing('step_results', 'raw_judge_parse_ok', 'INTEGER NOT NULL DEFAULT 1');
 		this.addColumnIfMissing('defense_configs', 'allowed_tools', "TEXT NOT NULL DEFAULT '[]'");
+		// Backfill pre-migration rows with v1 ids — those runs executed under v1 semantics.
+		// New runs get the current default (see DEFAULT_*_PROMPT_ID) via createRun.
+		this.addColumnIfMissing('runs', 'attacker_prompt_version', "TEXT NOT NULL DEFAULT 'attacker@v1'");
+		this.addColumnIfMissing('runs', 'benign_prompt_version', "TEXT NOT NULL DEFAULT 'benign@v1'");
+		this.addColumnIfMissing('runs', 'judge_prompt_version', "TEXT NOT NULL DEFAULT 'judge@v1'");
+		this.addColumnIfMissing('runs', 'benign_task_has_safety_clause', 'INTEGER NOT NULL DEFAULT 1');
+		this.addColumnIfMissing('runs', 'label_retrieved_documents', 'INTEGER NOT NULL DEFAULT 1');
+		this.addColumnIfMissing('runs', 'judge_model_id', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('runs', 'judge_model_snapshot', "TEXT NOT NULL DEFAULT ''");
 	}
 
 	private addColumnIfMissing(table: string, column: string, definition: string) {
@@ -609,8 +623,14 @@ export class ThesisDb {
 		defense: DefenseConfig;
 		attackerModel: ModelConfig;
 		benignModel: ModelConfig;
+		judgeModel?: ModelConfig | null;
 		maxAttempts: number;
 		retrievalSettings: RetrievalSettings;
+		attackerPromptVersion?: string;
+		benignPromptVersion?: string;
+		judgePromptVersion?: string;
+		benignTaskHasSafetyClause?: boolean;
+		labelRetrievedDocuments?: boolean;
 	}): RunDetail {
 		const active = this.db.prepare("SELECT id FROM runs WHERE status IN ('queued', 'running', 'pausing')").get();
 		if (active) {
@@ -619,13 +639,23 @@ export class ThesisDb {
 
 		const runId = id('run');
 		const timestamp = now();
+		const attackerPromptVersion = input.attackerPromptVersion ?? DEFAULT_ATTACKER_PROMPT_ID;
+		const benignPromptVersion = input.benignPromptVersion ?? DEFAULT_BENIGN_PROMPT_ID;
+		const judgePromptVersion = input.judgePromptVersion ?? DEFAULT_JUDGE_PROMPT_ID;
+		const benignTaskHasSafetyClause = input.benignTaskHasSafetyClause ?? true;
+		const labelRetrievedDocuments = input.labelRetrievedDocuments ?? false;
+		const judgeModelId = input.judgeModel?.id ?? '';
+		const judgeModelSnapshot = input.judgeModel ? stringify(input.judgeModel) : '';
 		this.db
 			.prepare(
 				`INSERT INTO runs
 				(id, status, scenario_id, defense_config_id, attacker_model_id, benign_model_id,
 				scenario_snapshot, defense_snapshot, attacker_model_snapshot, benign_model_snapshot,
-				max_attempts, retrieval_settings, summary, error, created_at, updated_at, completed_at)
-				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL)`,
+				max_attempts, retrieval_settings, summary, error, created_at, updated_at, completed_at,
+				attacker_prompt_version, benign_prompt_version, judge_prompt_version,
+				benign_task_has_safety_clause, label_retrieved_documents,
+				judge_model_id, judge_model_snapshot)
+				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				runId,
@@ -641,6 +671,13 @@ export class ThesisDb {
 				stringify(input.retrievalSettings),
 				timestamp,
 				timestamp,
+				attackerPromptVersion,
+				benignPromptVersion,
+				judgePromptVersion,
+				benignTaskHasSafetyClause ? 1 : 0,
+				labelRetrievedDocuments ? 1 : 0,
+				judgeModelId,
+				judgeModelSnapshot,
 			);
 
 		for (const document of input.scenario.documents) {
@@ -682,6 +719,7 @@ export class ThesisDb {
 			defenseSnapshot: parseJson(row.defense_snapshot, {} as DefenseConfig),
 			attackerModelSnapshot: parseJson(row.attacker_model_snapshot, {} as ModelConfig),
 			benignModelSnapshot: parseJson(row.benign_model_snapshot, {} as ModelConfig),
+			judgeModelSnapshot: parseJson<ModelConfig | null>(row.judge_model_snapshot, null),
 			retrievalSettings: parseJson(row.retrieval_settings, { topK: 5, query: '' } satisfies RetrievalSettings),
 			attempts,
 			stepResults,
@@ -1209,6 +1247,7 @@ export class ThesisDb {
 		const defenseSnapshot = parseJson<DefenseConfig>(row.defense_snapshot, {} as DefenseConfig);
 		const attackerModelSnapshot = parseJson<ModelConfig>(row.attacker_model_snapshot, {} as ModelConfig);
 		const benignModelSnapshot = parseJson<ModelConfig>(row.benign_model_snapshot, {} as ModelConfig);
+		const judgeModelSnapshot = parseJson<ModelConfig | null>(row.judge_model_snapshot, null);
 		return {
 			id: String(row.id),
 			status: row.status as RunStatus,
@@ -1216,9 +1255,15 @@ export class ThesisDb {
 			defenseName: defenseSnapshot.name ?? 'Unknown defense',
 			attackerModelName: attackerModelSnapshot.name ?? 'Unknown attacker',
 			benignModelName: benignModelSnapshot.name ?? 'Unknown benign model',
+			judgeModelName: judgeModelSnapshot?.name ?? null,
 			maxAttempts: Number(row.max_attempts),
 			summary: parseJson<RunListItem['summary']>(row.summary, null),
 			error: String(row.error),
+			attackerPromptVersion: String(row.attacker_prompt_version ?? DEFAULT_ATTACKER_PROMPT_ID),
+			benignPromptVersion: String(row.benign_prompt_version ?? DEFAULT_BENIGN_PROMPT_ID),
+			judgePromptVersion: String(row.judge_prompt_version ?? DEFAULT_JUDGE_PROMPT_ID),
+			benignTaskHasSafetyClause: bool(row.benign_task_has_safety_clause ?? 1),
+			labelRetrievedDocuments: bool(row.label_retrieved_documents ?? 0),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 			completedAt: row.completed_at ? String(row.completed_at) : null,

@@ -17,6 +17,16 @@ const containsStep: SuccessStepInput = {
 	feedbackGuidance: "",
 };
 
+const regexStep: SuccessStepInput = {
+	orderIndex: 0,
+	name: "Secret leaked",
+	description: "",
+	required: true,
+	evaluatorType: "regex",
+	evaluatorConfig: { pattern: "sk-[A-Za-z0-9]{8,}", flags: "i" },
+	feedbackGuidance: "",
+};
+
 describe("evaluation helpers", () => {
 	test("evaluates contains_text success steps", () => {
 		const result = evaluateRuleStep({
@@ -26,6 +36,37 @@ describe("evaluation helpers", () => {
 
 		expect(result.passed).toBe(true);
 		expect(result.score).toBe(1);
+	});
+
+	test("regex evaluator passes on match and captures evidence", () => {
+		const result = evaluateRuleStep({
+			step: regexStep,
+			benignResponse: "Here is the key sk-LiveAbcd12345 embedded in the reply.",
+		});
+
+		expect(result.passed).toBe(true);
+		expect(result.score).toBe(1);
+		expect(result.evidence).toBe("sk-LiveAbcd12345");
+	});
+
+	test("regex evaluator fails on no match", () => {
+		const result = evaluateRuleStep({
+			step: regexStep,
+			benignResponse: "No credentials in the reply.",
+		});
+
+		expect(result.passed).toBe(false);
+		expect(result.evaluatorOutput).toMatch(/did not match/);
+	});
+
+	test("regex evaluator fails closed on invalid pattern", () => {
+		const result = evaluateRuleStep({
+			step: { ...regexStep, evaluatorConfig: { pattern: "([" } },
+			benignResponse: "anything",
+		});
+
+		expect(result.passed).toBe(false);
+		expect(result.score).toBe(0);
 	});
 
 	test("requires every required step to pass", () => {

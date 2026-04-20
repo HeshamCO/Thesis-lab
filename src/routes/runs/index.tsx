@@ -1,19 +1,28 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlayIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
 import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/components/ui/card";
+import { Checkbox } from "#/components/ui/checkbox";
 import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type { StartRunInput } from "#/lib/thesis/schemas";
+import {
+	ATTACKER_PROMPT_VERSIONS,
+	BENIGN_PROMPT_VERSIONS,
+	DEFAULT_ATTACKER_PROMPT_VERSION,
+	DEFAULT_BENIGN_PROMPT_VERSION,
+	DEFAULT_JUDGE_PROMPT_VERSION,
+	JUDGE_PROMPT_VERSIONS,
+	type StartRunInput,
+} from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/runs/")({ component: RunsPage });
 
@@ -22,9 +31,15 @@ function RunsPage() {
 		scenarioId: "",
 		attackerModelId: "",
 		benignModelId: "",
+		judgeModelId: "",
 		defenseConfigId: "",
-		maxAttempts: 5,
+		maxAttempts: 2,
 		retrievalSettings: { topK: 5, query: "" },
+		attackerPromptVersion: DEFAULT_ATTACKER_PROMPT_VERSION,
+		benignPromptVersion: DEFAULT_BENIGN_PROMPT_VERSION,
+		judgePromptVersion: DEFAULT_JUDGE_PROMPT_VERSION,
+		benignTaskHasSafetyClause: true,
+		labelRetrievedDocuments: false,
 	});
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -37,10 +52,15 @@ function RunsPage() {
 		queryKey: queryKeys.defenses,
 		queryFn: api.defenses,
 	});
+
+	useEffect(() => {
+		if (form.defenseConfigId || !defenses.data?.length) return;
+		const baseline = defenses.data.find((d) => d.mode === "none") ?? defenses.data[0];
+		setForm((current) => (current.defenseConfigId ? current : { ...current, defenseConfigId: baseline.id }));
+	}, [defenses.data, form.defenseConfigId]);
 	const runs = useQuery({
 		queryKey: queryKeys.runs,
 		queryFn: api.runs,
-		refetchInterval: 3000,
 	});
 	const startRun = useMutation({
 		mutationFn: api.startRun,
@@ -72,15 +92,24 @@ function RunsPage() {
 						className="grid gap-4 md:grid-cols-3"
 						onSubmit={(event) => {
 							event.preventDefault();
-							startRun.mutate(form);
+							const { judgeModelId, ...rest } = form;
+							startRun.mutate(judgeModelId ? { ...rest, judgeModelId } : rest);
 						}}
 					>
-						<Field label="Scenario">
+						<Field label="Scenario" col={2}>
 							<EntitySelect
 								value={form.scenarioId}
 								placeholder="Select scenario"
 								items={scenarios.data ?? []}
 								onChange={(scenarioId) => setForm({ ...form, scenarioId })}
+							/>
+						</Field>
+						<Field label="Defense">
+							<EntitySelect
+								value={form.defenseConfigId}
+								placeholder="Select defense"
+								items={defenses.data ?? []}
+								onChange={(defenseConfigId) => setForm({ ...form, defenseConfigId })}
 							/>
 						</Field>
 						<Field label="Attacker model">
@@ -99,14 +128,15 @@ function RunsPage() {
 								onChange={(benignModelId) => setForm({ ...form, benignModelId })}
 							/>
 						</Field>
-						<Field label="Defense">
+						<Field label="Judge model">
 							<EntitySelect
-								value={form.defenseConfigId}
-								placeholder="Select defense"
-								items={defenses.data ?? []}
-								onChange={(defenseConfigId) => setForm({ ...form, defenseConfigId })}
+								value={form.judgeModelId ?? ""}
+								placeholder="Same as benign model"
+								items={models.data ?? []}
+								onChange={(judgeModelId) => setForm({ ...form, judgeModelId })}
 							/>
 						</Field>
+
 						<Field label="Max attempts">
 							<Input
 								type="number"
@@ -152,7 +182,40 @@ function RunsPage() {
 								}
 							/>
 						</Field>
-						<div className="flex items-end md:col-span-2">
+						<Field label="Attacker prompt schema">
+							<PromptVersionSelect
+								value={form.attackerPromptVersion}
+								items={ATTACKER_PROMPT_VERSIONS}
+								onChange={(attackerPromptVersion) => setForm({ ...form, attackerPromptVersion })}
+							/>
+						</Field>
+						<Field label="Benign prompt schema">
+							<PromptVersionSelect
+								value={form.benignPromptVersion}
+								items={BENIGN_PROMPT_VERSIONS}
+								onChange={(benignPromptVersion) => setForm({ ...form, benignPromptVersion })}
+							/>
+						</Field>
+						<Field label="Judge prompt schema">
+							<PromptVersionSelect
+								value={form.judgePromptVersion}
+								items={JUDGE_PROMPT_VERSIONS}
+								onChange={(judgePromptVersion) => setForm({ ...form, judgePromptVersion })}
+							/>
+						</Field>
+						<BooleanField
+							label="Keep benign task safety clause"
+							description="Includes task text such as do not reveal approval codes or credentials."
+							checked={form.benignTaskHasSafetyClause}
+							onCheckedChange={(benignTaskHasSafetyClause) => setForm({ ...form, benignTaskHasSafetyClause })}
+						/>
+						<BooleanField
+							label="Label retrieved documents"
+							description="Default off for clean runs; benign prompts still use neutral labels only."
+							checked={form.labelRetrievedDocuments}
+							onCheckedChange={(labelRetrievedDocuments) => setForm({ ...form, labelRetrievedDocuments })}
+						/>
+						<div className="flex items-end">
 							<Button type="submit" disabled={startRun.isPending}>
 								<PlayIcon data-icon="inline-start" />
 								Start run
@@ -208,6 +271,33 @@ function RunsPage() {
 	);
 }
 
+function PromptVersionSelect<T extends string>({
+	value,
+	items,
+	onChange,
+}: {
+	value: T;
+	items: readonly T[];
+	onChange: (value: T) => void;
+}) {
+	return (
+		<Select value={value} onValueChange={(next) => onChange(next as T)}>
+			<SelectTrigger>
+				<SelectValue />
+			</SelectTrigger>
+			<SelectContent>
+				<SelectGroup>
+					{items.map((item) => (
+						<SelectItem key={item} value={item}>
+							{item}
+						</SelectItem>
+					))}
+				</SelectGroup>
+			</SelectContent>
+		</Select>
+	);
+}
+
 function EntitySelect({
 	value,
 	placeholder,
@@ -237,9 +327,31 @@ function EntitySelect({
 	);
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function BooleanField({
+	label,
+	description,
+	checked,
+	onCheckedChange,
+}: {
+	label: string;
+	description: string;
+	checked: boolean;
+	onCheckedChange: (checked: boolean) => void;
+}) {
 	return (
-		<label className="flex flex-col gap-2">
+		<div className="flex items-start gap-3 rounded-md border p-3">
+			<Checkbox checked={checked} onCheckedChange={(value) => onCheckedChange(value === true)} />
+			<div className="grid gap-1 leading-none">
+				<Label>{label}</Label>
+				<p className="m-0 text-muted-foreground text-xs leading-5">{description}</p>
+			</div>
+		</div>
+	);
+}
+
+function Field({ label, children, col = 1 }: { label: string; children: React.ReactNode; col?: number }) {
+	return (
+		<label className={`flex flex-col gap-2 col-span-${col}`}>
 			<Label>{label}</Label>
 			{children}
 		</label>

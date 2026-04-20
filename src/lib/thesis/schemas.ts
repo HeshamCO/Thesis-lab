@@ -14,6 +14,13 @@ export const evaluatorTypeSchema = z.enum([
 
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
+export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2"] as const;
+export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2"] as const;
+export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2"] as const;
+export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v2";
+export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v2";
+export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v2";
+
 export const runStatusSchema = z.enum(["queued", "running", "pausing", "paused", "completed", "failed"]);
 
 export const ACTIVE_RUN_STATUSES: ReadonlyArray<z.infer<typeof runStatusSchema>> = [
@@ -109,9 +116,15 @@ export const startRunInputSchema = z.object({
 	scenarioId: z.string().min(1),
 	attackerModelId: z.string().min(1),
 	benignModelId: z.string().min(1),
+	judgeModelId: z.string().min(1).optional(),
 	defenseConfigId: z.string().min(1),
 	maxAttempts: z.coerce.number().int().min(1).max(50),
 	retrievalSettings: retrievalSettingsSchema,
+	attackerPromptVersion: z.enum(ATTACKER_PROMPT_VERSIONS).default(DEFAULT_ATTACKER_PROMPT_VERSION),
+	benignPromptVersion: z.enum(BENIGN_PROMPT_VERSIONS).default(DEFAULT_BENIGN_PROMPT_VERSION),
+	judgePromptVersion: z.enum(JUDGE_PROMPT_VERSIONS).default(DEFAULT_JUDGE_PROMPT_VERSION),
+	benignTaskHasSafetyClause: z.coerce.boolean().default(true),
+	labelRetrievedDocuments: z.coerce.boolean().default(false),
 });
 
 export type DefenseMode = z.infer<typeof defenseModeSchema>;
@@ -169,9 +182,15 @@ export type RunListItem = {
 	defenseName: string;
 	attackerModelName: string;
 	benignModelName: string;
+	judgeModelName: string | null;
 	maxAttempts: number;
 	summary: RunSummary | null;
 	error: string;
+	attackerPromptVersion: string;
+	benignPromptVersion: string;
+	judgePromptVersion: string;
+	benignTaskHasSafetyClause: boolean;
+	labelRetrievedDocuments: boolean;
 	createdAt: string;
 	updatedAt: string;
 	completedAt: string | null;
@@ -262,6 +281,7 @@ export type RunDetail = RunListItem & {
 	defenseSnapshot: DefenseConfig;
 	attackerModelSnapshot: ModelConfig;
 	benignModelSnapshot: ModelConfig;
+	judgeModelSnapshot: ModelConfig | null;
 	retrievalSettings: RetrievalSettings;
 	attempts: AttemptRecord[];
 	stepResults: StepResultRecord[];
