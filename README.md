@@ -28,6 +28,8 @@ Create `.env.local` with model credentials when you want real model calls:
 
 ```env
 OPENAI_API_KEY=your_key_here
+OPENROUTER_API_KEY=your_openrouter_key_here
+OLLAMA_API_KEY=your_ollama_key_if_needed
 ```
 
 Run the web app and API worker:
@@ -54,6 +56,7 @@ bun --bun run lint
 bun --bun run test
 bun --bun run format
 bun --bun run seed:ollama
+bun --bun run seed:openrouter
 bun --bun run seed:scenarios
 ```
 
@@ -66,6 +69,16 @@ bun --bun run db:studio
 ```
 
 The runtime schema is currently created by the local API server on startup.
+
+## OpenRouter
+
+The app talks to OpenRouter through its OpenAI-compatible endpoint at `https://openrouter.ai/api/v1`. Set `OPENROUTER_API_KEY` in `.env.local`, then seed the default model entries:
+
+```bash
+bun --bun run seed:openrouter
+```
+
+The seeded entry uses `openai/gpt-oss-120b:free`. To add more OpenRouter models (e.g. `anthropic/claude-3.5-sonnet`, `meta-llama/llama-3.3-70b-instruct`), either edit `server/seed-openrouter.ts` or add them from the Models page in the UI with `baseUrl=https://openrouter.ai/api/v1` and `apiKeyEnvVar=OPENROUTER_API_KEY`.
 
 ## Ollama Local Model
 
