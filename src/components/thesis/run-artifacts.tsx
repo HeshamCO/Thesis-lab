@@ -53,7 +53,7 @@ export function RunArtifacts({ detail, onSelect }: Props) {
 				</span>
 			</div>
 			{rows.length === 0 ? (
-				<div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+				<div className="rounded-md bg-muted/30 p-6 text-sm text-muted-foreground">
 					No artifacts yet. Attacker outputs and retrieved documents appear here as the engine runs each attempt.
 				</div>
 			) : (

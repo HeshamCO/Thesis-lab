@@ -9,7 +9,6 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ScenariosIndexRouteImport } from './routes/scenarios/index'
 import { Route as RunsIndexRouteImport } from './routes/runs/index'
@@ -18,11 +17,6 @@ import { Route as DefensesIndexRouteImport } from './routes/defenses/index'
 import { Route as ScenariosScenarioIdRouteImport } from './routes/scenarios/$scenarioId'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
 
-const AboutRoute = AboutRouteImport.update({
-  id: '/about',
-  path: '/about',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -61,7 +55,6 @@ const RunsRunIdRoute = RunsRunIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
   '/defenses/': typeof DefensesIndexRoute
@@ -71,7 +64,6 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
   '/defenses': typeof DefensesIndexRoute
@@ -82,7 +74,6 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/about': typeof AboutRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
   '/defenses/': typeof DefensesIndexRoute
@@ -94,7 +85,6 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
-    | '/about'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
     | '/defenses/'
@@ -104,7 +94,6 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
-    | '/about'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
     | '/defenses'
@@ -114,7 +103,6 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
-    | '/about'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
     | '/defenses/'
@@ -125,7 +113,6 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AboutRoute: typeof AboutRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
   ScenariosScenarioIdRoute: typeof ScenariosScenarioIdRoute
   DefensesIndexRoute: typeof DefensesIndexRoute
@@ -136,13 +123,6 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/about': {
-      id: '/about'
-      path: '/about'
-      fullPath: '/about'
-      preLoaderRoute: typeof AboutRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -197,7 +177,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AboutRoute: AboutRoute,
   RunsRunIdRoute: RunsRunIdRoute,
   ScenariosScenarioIdRoute: ScenariosScenarioIdRoute,
   DefensesIndexRoute: DefensesIndexRoute,

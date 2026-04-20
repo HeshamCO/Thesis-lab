@@ -309,7 +309,7 @@ function DocumentEditor({
 	onRemove: () => void;
 }) {
 	return (
-		<div className="flex flex-col gap-3 rounded-lg border p-4">
+		<div className="flex flex-col gap-3 rounded-lg bg-muted p-4">
 			<Field label="Title">
 				<Input
 					value={document.title}
@@ -346,7 +346,7 @@ function ToolEditor({
 	const [returnValueError, setReturnValueError] = useState<string | null>(null);
 
 	return (
-		<div className="flex flex-col gap-3 rounded-lg border p-4">
+		<div className="flex flex-col gap-3 rounded-lg bg-muted p-4">
 			<div className="grid gap-3 md:grid-cols-2">
 				<Field label="Name (matches /^[a-zA-Z_][a-zA-Z0-9_]*$/)">
 					<Input value={tool.name} onChange={(event) => onChange({ ...tool, name: event.currentTarget.value })} />
@@ -498,7 +498,7 @@ function StepEditor({
 		step.evaluatorType === "tool_called_with";
 
 	return (
-		<div className="flex flex-col gap-4 rounded-lg border p-4">
+		<div className="flex flex-col gap-4 rounded-lg bg-muted p-4">
 			<div className="grid gap-4 md:grid-cols-[5rem_1fr_12rem]">
 				<Field label="Order">
 					<Input

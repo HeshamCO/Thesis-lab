@@ -1,6 +1,6 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ActivityIcon, ArrowRightIcon } from "lucide-react";
+import { ActivityIcon, ArrowRightIcon, BotIcon, ShieldIcon, TargetIcon } from "lucide-react";
 import { MetricCard } from "#/components/thesis/metric-card";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
@@ -36,26 +36,30 @@ function DashboardPage() {
 				}
 			/>
 
-			<section className="grid gap-4 md:grid-cols-4">
+			<section className="grid gap-3 md:grid-cols-4">
 				<MetricCard
 					label="Scenarios"
 					value={data?.scenarioCount ?? "—"}
 					description="Benign tasks, attacker goals, corpus docs, and success steps."
+					icon={TargetIcon}
 				/>
 				<MetricCard
 					label="Models"
 					value={data?.modelCount ?? "—"}
 					description="OpenAI-compatible endpoints referenced by role."
+					icon={BotIcon}
 				/>
 				<MetricCard
 					label="Defenses"
 					value={data?.defenseCount ?? "—"}
 					description="Prompt guards and retrieval filters ready for runs."
+					icon={ShieldIcon}
 				/>
 				<MetricCard
 					label="Runs"
 					value={data?.runCount ?? "—"}
 					description="Persisted attempts, logs, snapshots, and summaries."
+					icon={ActivityIcon}
 				/>
 			</section>
 

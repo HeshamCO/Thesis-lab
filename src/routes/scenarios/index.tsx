@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PlusIcon } from "lucide-react";
+import { ArrowRightIcon, PlusIcon, XIcon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { Button } from "#/components/ui/button";
@@ -42,6 +42,7 @@ const initialScenario: ScenarioInput = {
 
 function ScenariosPage() {
 	const [form, setForm] = useState<ScenarioInput>(initialScenario);
+	const [showCreate, setShowCreate] = useState(false);
 	const queryClient = useQueryClient();
 	const navigate = useNavigate();
 	const scenarios = useQuery({
@@ -54,6 +55,7 @@ function ScenariosPage() {
 			queryClient.invalidateQueries({ queryKey: queryKeys.scenarios });
 			toast.success("Scenario created");
 			setForm(initialScenario);
+			setShowCreate(false);
 			navigate({
 				to: "/scenarios/$scenarioId",
 				params: { scenarioId: scenario.id },
@@ -62,13 +64,34 @@ function ScenariosPage() {
 		onError: (error) => toast.error(error.message),
 	});
 
+	const list = scenarios.data ?? [];
+
 	return (
 		<>
 			<PageHeading
 				title="Scenarios"
 				description="Define the benign task, attacker objective, retrieved corpus, and ordered success criteria."
+				action={
+					<Button
+						variant={showCreate ? "outline" : "default"}
+						onClick={() => setShowCreate((open) => !open)}
+					>
+						{showCreate ? (
+							<>
+								<XIcon data-icon="inline-start" />
+								Cancel
+							</>
+						) : (
+							<>
+								<PlusIcon data-icon="inline-start" />
+								New scenario
+							</>
+						)}
+					</Button>
+				}
 			/>
 
+			{showCreate ? (
 			<Card>
 				<CardHeader>
 					<CardTitle>Create scenario</CardTitle>
@@ -158,41 +181,63 @@ function ScenariosPage() {
 					</form>
 				</CardContent>
 			</Card>
+			) : null}
 
 			<Card>
 				<CardHeader>
 					<CardTitle>Scenario library</CardTitle>
-					<CardDescription>Open a scenario to edit documents and ordered success steps.</CardDescription>
+					<CardDescription>
+						{list.length} scenario{list.length === 1 ? "" : "s"} — open one to edit its documents and success steps.
+					</CardDescription>
 				</CardHeader>
-				<CardContent>
-					<Table>
-						<TableHeader>
-							<TableRow>
-								<TableHead>Name</TableHead>
-								<TableHead>Steps</TableHead>
-								<TableHead>Documents</TableHead>
-								<TableHead>Updated</TableHead>
-								<TableHead />
-							</TableRow>
-						</TableHeader>
-						<TableBody>
-							{(scenarios.data ?? []).map((scenario) => (
-								<TableRow key={scenario.id}>
-									<TableCell>{scenario.name}</TableCell>
-									<TableCell>{scenario.successSteps.length}</TableCell>
-									<TableCell>{scenario.documents.length}</TableCell>
-									<TableCell>{new Date(scenario.updatedAt).toLocaleString()}</TableCell>
-									<TableCell>
-										<Button variant="outline" size="sm" asChild>
-											<Link to="/scenarios/$scenarioId" params={{ scenarioId: scenario.id }}>
-												Edit
-											</Link>
-										</Button>
-									</TableCell>
+				<CardContent className="px-0">
+					{list.length === 0 ? (
+						<div className="mx-6 flex flex-col items-start gap-3 rounded-md bg-muted/40 p-6 text-sm">
+							<p className="m-0 text-muted-foreground">
+								No scenarios yet. Create one to define a benign task, attacker goal, and success steps.
+							</p>
+							<Button size="sm" onClick={() => setShowCreate(true)}>
+								<PlusIcon data-icon="inline-start" />
+								New scenario
+							</Button>
+						</div>
+					) : (
+						<Table>
+							<TableHeader>
+								<TableRow>
+									<TableHead>Name</TableHead>
+									<TableHead className="w-20 text-right">Steps</TableHead>
+									<TableHead className="w-24 text-right">Documents</TableHead>
+									<TableHead className="w-44">Updated</TableHead>
+									<TableHead className="w-24" />
 								</TableRow>
-							))}
-						</TableBody>
-					</Table>
+							</TableHeader>
+							<TableBody>
+								{list.map((scenario) => (
+									<TableRow key={scenario.id} className="group">
+										<TableCell className="font-medium">{scenario.name}</TableCell>
+										<TableCell className="text-right tabular-nums text-muted-foreground">
+											{scenario.successSteps.length}
+										</TableCell>
+										<TableCell className="text-right tabular-nums text-muted-foreground">
+											{scenario.documents.length}
+										</TableCell>
+										<TableCell className="text-muted-foreground">
+											{new Date(scenario.updatedAt).toLocaleString()}
+										</TableCell>
+										<TableCell className="text-right">
+											<Button variant="ghost" size="sm" asChild>
+												<Link to="/scenarios/$scenarioId" params={{ scenarioId: scenario.id }}>
+													Open
+													<ArrowRightIcon data-icon="inline-end" />
+												</Link>
+											</Button>
+										</TableCell>
+									</TableRow>
+								))}
+							</TableBody>
+						</Table>
+					)}
 				</CardContent>
 			</Card>
 		</>

@@ -66,6 +66,7 @@ function RunDetailPage() {
 			<PageHeading
 				title={detail.scenarioName}
 				description={`${detail.attackerModelName} → ${detail.benignModelName} under ${detail.defenseName}`}
+				backButton="runs"
 				action={
 					<div className="flex flex-wrap items-center gap-2">
 						<HelpDrawer />
@@ -110,21 +111,17 @@ function RunDetailPage() {
 				</TabsContent>
 
 				<TabsContent value="tree" className="flex flex-col gap-3">
-					<Card>
-						<CardHeader>
-							<CardTitle>Attempt walkthrough</CardTitle>
-							<CardDescription>
-								Read each attempt as a 6-step story: attacker → retrieval → defense → benign response → step verdicts →
-								feedback. Use the timeline at the top or
-								<kbd className="mx-1 rounded border bg-muted px-1 font-mono text-[10px]">j</kbd>/
-								<kbd className="mx-1 rounded border bg-muted px-1 font-mono text-[10px]">k</kbd>
-								to step between attempts.
-							</CardDescription>
-						</CardHeader>
-						<CardContent>
-							<RunTree detail={detail} onSelect={setPanel} />
-						</CardContent>
-					</Card>
+					<div className="flex flex-col gap-1">
+						<h2 className="m-0 text-base font-semibold">Attempt walkthrough</h2>
+						<p className="m-0 text-sm text-muted-foreground">
+							Read each attempt as a 6-step story: attacker → retrieval → defense → benign response → step verdicts →
+							feedback. Use the timeline or
+							<kbd className="mx-1 rounded bg-muted px-1 font-mono text-[10px]">j</kbd>/
+							<kbd className="mx-1 rounded bg-muted px-1 font-mono text-[10px]">k</kbd>
+							to step between attempts.
+						</p>
+					</div>
+					<RunTree detail={detail} onSelect={setPanel} />
 				</TabsContent>
 
 				<TabsContent value="artifacts">
@@ -164,31 +161,34 @@ function RunDetailPage() {
 function OverviewTab({ detail, progress }: { detail: RunDetail; progress: number }) {
 	const stats = computeRunStats(detail);
 	const summary = narrateRun(detail);
+	const progressPct = (progress / detail.maxAttempts) * 100;
 	return (
 		<>
-			<Card>
-				<CardHeader>
-					<CardTitle>What happened</CardTitle>
-					<CardDescription>
-						Auto-generated summary of this run. Use the Attempts tab for the per-attempt walkthrough.
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					<p className="m-0 text-sm leading-relaxed">{summary}</p>
-				</CardContent>
-			</Card>
+			<div className="flex flex-col gap-4 rounded-lg border border-border bg-card p-5">
+				<div className="flex flex-wrap items-center justify-between gap-3">
+					<div className="flex items-center gap-3">
+						<StatusBadge status={detail.status} />
+						<span className="text-sm text-muted-foreground">
+							Attempt{" "}
+							<span className="font-medium text-foreground tabular-nums">
+								{progress}/{detail.maxAttempts}
+							</span>
+						</span>
+					</div>
+					<span className="text-xs text-muted-foreground tabular-nums">{progressPct.toFixed(0)}% complete</span>
+				</div>
+				<Progress value={progressPct} />
+				<dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-xs md:grid-cols-3">
+					<ConfigRow label="Defense mode" value={detail.defenseSnapshot.mode} />
+					<ConfigRow label="Top K" value={String(detail.retrievalSettings.topK)} />
+					<ConfigRow
+						label="Query"
+						value={detail.retrievalSettings.query || detail.scenarioSnapshot.retrievalQuery || "—"}
+					/>
+				</dl>
+			</div>
 
-			<section className="grid gap-4 md:grid-cols-4">
-				<MetricCard
-					label="Status"
-					value={detail.status}
-					description={detail.error || "Persistent status from the worker."}
-				/>
-				<MetricCard
-					label="Attempts"
-					value={`${progress}/${detail.maxAttempts}`}
-					description="Attempt checkpoints persisted for recovery."
-				/>
+			<section className="grid gap-3 md:grid-cols-4">
 				<MetricCard
 					label="Final success"
 					value={detail.summary ? String(detail.summary.finalSuccess) : "—"}
@@ -199,31 +199,8 @@ function OverviewTab({ detail, progress }: { detail: RunDetail; progress: number
 					value={detail.summary ? detail.summary.utilityScore.toFixed(2) : "—"}
 					description="Average final-attempt evaluator score."
 				/>
-			</section>
-
-			<Card>
-				<CardHeader>
-					<CardTitle className="flex items-center gap-2">
-						<StatusBadge status={detail.status} />
-						Run progress
-					</CardTitle>
-					<CardDescription>Live updates arrive over Socket.IO and are also persisted in SQLite.</CardDescription>
-				</CardHeader>
-				<CardContent className="flex flex-col gap-4">
-					<Progress value={(progress / detail.maxAttempts) * 100} />
-					<div className="grid gap-3 text-sm md:grid-cols-3">
-						<p className="m-0 text-muted-foreground">Defense mode: {detail.defenseSnapshot.mode}</p>
-						<p className="m-0 text-muted-foreground">Top K: {detail.retrievalSettings.topK}</p>
-						<p className="m-0 text-muted-foreground">
-							Query: {detail.retrievalSettings.query || detail.scenarioSnapshot.retrievalQuery}
-						</p>
-					</div>
-				</CardContent>
-			</Card>
-
-			<section className="grid gap-4 md:grid-cols-4">
 				<MetricCard
-					label="Total run duration"
+					label="Total duration"
 					value={formatDurationMs(stats.totalDurationMs)}
 					description="Sum of completed attempt durations."
 				/>
@@ -232,6 +209,9 @@ function OverviewTab({ detail, progress }: { detail: RunDetail; progress: number
 					value={formatDurationMs(stats.avgAttemptDurationMs)}
 					description={`attack ${formatDurationMs(stats.avgAttackDurationMs)} · benign ${formatDurationMs(stats.avgBenignDurationMs)}`}
 				/>
+			</section>
+
+			<section className="grid gap-3 md:grid-cols-2">
 				<MetricCard
 					label="Defense filter hit rate"
 					value={formatPercent(stats.defenseFilterHitRate)}
@@ -243,6 +223,27 @@ function OverviewTab({ detail, progress }: { detail: RunDetail; progress: number
 					description="Attacker JSON / LLM judge JSON parse failures. Filter logs by warn level for raw outputs."
 				/>
 			</section>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Summary</CardTitle>
+					<CardDescription>
+						Auto-generated narrative of this run. See the Attempts tab for the per-attempt walkthrough.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<p className="m-0 text-sm leading-relaxed text-foreground/90">{summary}</p>
+				</CardContent>
+			</Card>
 		</>
+	);
+}
+
+function ConfigRow({ label, value }: { label: string; value: string }) {
+	return (
+		<div className="flex flex-col gap-0.5 min-w-0">
+			<dt className="text-[10px] font-medium uppercase tracking-[0.12em] text-muted-foreground">{label}</dt>
+			<dd className="m-0 truncate text-sm text-foreground">{value}</dd>
+		</div>
 	);
 }

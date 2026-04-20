@@ -54,19 +54,27 @@ type Props = {
 };
 
 const TONE_CHIP: Record<Tone, string> = {
-	pass: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-300",
-	fail: "bg-destructive/15 text-destructive border-destructive/40",
-	warn: "bg-amber-500/15 text-amber-800 border-amber-500/40 dark:text-amber-300",
-	info: "bg-muted text-muted-foreground border-border",
-	running: "bg-sky-500/15 text-sky-700 border-sky-500/40 dark:text-sky-300",
+	pass: "bg-[color-mix(in_oklch,var(--success)_14%,transparent)] text-[var(--success)]",
+	fail: "bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] text-destructive",
+	warn: "bg-[color-mix(in_oklch,var(--warning)_14%,transparent)] text-[var(--warning)]",
+	info: "bg-muted text-muted-foreground",
+	running: "bg-[color-mix(in_oklch,var(--info)_14%,transparent)] text-[var(--info)]",
 };
 
 const TONE_RAIL: Record<Tone, string> = {
-	pass: "border-emerald-500/60 text-emerald-600 dark:text-emerald-400",
-	fail: "border-destructive/70 text-destructive",
-	warn: "border-amber-500/60 text-amber-600 dark:text-amber-400",
-	info: "border-border text-muted-foreground",
-	running: "border-sky-500/60 text-sky-600 dark:text-sky-400",
+	pass: "bg-[var(--success)] text-[var(--success)]",
+	fail: "bg-destructive text-destructive",
+	warn: "bg-[var(--warning)] text-[var(--warning)]",
+	info: "bg-border text-muted-foreground",
+	running: "bg-[var(--info)] text-[var(--info)]",
+};
+
+const TONE_TEXT: Record<Tone, string> = {
+	pass: "text-[var(--success)]",
+	fail: "text-destructive",
+	warn: "text-[var(--warning)]",
+	info: "text-muted-foreground",
+	running: "text-[var(--info)]",
 };
 
 const ATTEMPT_LOG_EVENTS = ["retrieval.queried", "defense.applied", "benign.responded"] as const;
@@ -115,12 +123,12 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 			id={id}
 			aria-label={`Attempt ${attempt.attemptNumber}`}
 			className={cn(
-				"flex scroll-mt-24 flex-col gap-3 rounded-lg border bg-card p-4 shadow-sm transition-shadow",
-				isFocused && "ring-2 ring-primary/40",
+				"flex scroll-mt-24 flex-col gap-4 rounded-lg border border-border bg-card p-5 transition-colors",
+				isFocused && "border-ring/60 ring-1 ring-ring/30",
 			)}
 		>
 			<AttemptHeader attempt={attempt} headline={headline} />
-			<div className="flex flex-col gap-2">
+			<div className="flex flex-col">
 				<PhaseCard
 					number={1}
 					icon={BotIcon}
@@ -131,8 +139,6 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 				>
 					<AttackerArtifacts attempt={attempt} artifacts={artifacts} runId={detail.id} onSelect={onSelect} />
 				</PhaseCard>
-
-				<PhaseConnector />
 
 				<PhaseCard
 					number={2}
@@ -145,8 +151,6 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 					<RetrievalList attempt={attempt} retrievalLog={retrievalLog} onSelect={onSelect} />
 				</PhaseCard>
 
-				<PhaseConnector />
-
 				<PhaseCard
 					number={3}
 					icon={ShieldIcon}
@@ -157,8 +161,6 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 				>
 					<DefenseList defenseLog={defenseLog} onSelect={onSelect} />
 				</PhaseCard>
-
-				<PhaseConnector />
 
 				<PhaseCard
 					number={4}
@@ -177,8 +179,6 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 					/>
 				</PhaseCard>
 
-				<PhaseConnector />
-
 				<PhaseCard
 					number={5}
 					icon={WrenchIcon}
@@ -196,8 +196,6 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 				>
 					<ToolCallList toolCalls={toolCalls} onSelect={onSelect} attempt={attempt} />
 				</PhaseCard>
-
-				<PhaseConnector />
 
 				<PhaseCard
 					number={6}
@@ -218,8 +216,6 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 				>
 					<StepList steps={stepResults} onSelect={onSelect} />
 				</PhaseCard>
-
-				<PhaseConnector />
 
 				<PhaseCard
 					number={7}
@@ -244,16 +240,16 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 
 function AttemptHeader({ attempt, headline }: { attempt: AttemptRecord; headline: AttemptHeadline }) {
 	return (
-		<header className="flex flex-col gap-1">
+		<header className="flex flex-col gap-1.5 border-b border-border/60 pb-3">
 			<div className="flex flex-wrap items-center gap-2">
 				<ToneIcon tone={headline.tone} className="size-5" />
 				<h3 className="m-0 text-base font-semibold">{headline.title}</h3>
 				<span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
-					<span className="inline-flex items-center gap-1">
+					<span className="inline-flex items-center gap-1 tabular-nums">
 						<ClockIcon className="size-3.5" />
 						{formatDurationMs(attempt.totalDurationMs)}
 					</span>
-					<Badge variant="outline" className={cn("border", TONE_CHIP[headline.tone])}>
+					<span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", TONE_CHIP[headline.tone])}>
 						{headline.tone === "pass"
 							? "Attack succeeded"
 							: headline.tone === "fail"
@@ -263,7 +259,7 @@ function AttemptHeader({ attempt, headline }: { attempt: AttemptRecord; headline
 									: headline.tone === "warn"
 										? "Partial"
 										: attempt.status}
-					</Badge>
+					</span>
 				</span>
 			</div>
 			<p className="m-0 ml-7 text-sm text-muted-foreground">{headline.body}</p>
@@ -294,20 +290,17 @@ function PhaseCard({
 	const [open, setOpen] = useState(Boolean(defaultOpen));
 	const hasContent = Boolean(children);
 	return (
-		<Collapsible open={open} onOpenChange={setOpen} className="flex flex-col">
+		<Collapsible open={open} onOpenChange={setOpen} className="group/phase relative flex flex-col py-3 first:pt-0">
 			<div className="flex gap-3">
-				<div
-					className={cn(
-						"flex size-8 shrink-0 items-center justify-center rounded-full border-2 bg-background text-xs font-semibold",
-						TONE_RAIL[tone],
-					)}
-					aria-hidden
-				>
-					{number}
+				<div className="flex flex-col items-center pt-0.5">
+					<span className={cn("text-xs font-semibold tabular-nums", TONE_TEXT[tone])} aria-hidden>
+						{number}
+					</span>
+					<span className={cn("mt-1 w-px flex-1", TONE_RAIL[tone], "opacity-30")} aria-hidden />
 				</div>
-				<div className="flex flex-1 flex-col gap-1 rounded-md border bg-background p-3">
+				<div className="flex flex-1 flex-col gap-1 pb-1">
 					<div className="flex flex-wrap items-center gap-2">
-						<Icon className={cn("size-4", TONE_RAIL[tone])} aria-hidden />
+						<Icon className={cn("size-4", TONE_TEXT[tone])} aria-hidden />
 						<span className="text-sm font-semibold">{title}</span>
 						{meta ? <span className="text-xs text-muted-foreground">· {meta}</span> : null}
 						{hasContent ? (
@@ -316,12 +309,12 @@ function PhaseCard({
 									type="button"
 									size="sm"
 									variant="ghost"
-									className="ml-auto h-7 gap-1 text-xs"
+									className="ml-auto h-7 gap-1 px-2 text-xs"
 									aria-controls={id}
 									aria-expanded={open}
 								>
 									<ChevronDownIcon className={cn("size-3.5 transition-transform", open && "rotate-180")} />
-									{open ? "Hide details" : "Show details"}
+									{open ? "Hide" : "Details"}
 								</Button>
 							</CollapsibleTrigger>
 						) : null}
@@ -338,27 +331,16 @@ function PhaseCard({
 	);
 }
 
-function PhaseConnector() {
-	return (
-		<div className="flex" aria-hidden>
-			<div className="flex w-8 justify-center">
-				<span className="block h-3 w-px bg-border" />
-			</div>
-			<div className="flex-1" />
-		</div>
-	);
-}
-
 function ToneIcon({ tone, className }: { tone: Tone; className?: string }) {
 	switch (tone) {
 		case "pass":
-			return <CircleCheckIcon className={cn("text-emerald-600 dark:text-emerald-400", className)} />;
+			return <CircleCheckIcon className={cn("text-[var(--success)]", className)} />;
 		case "fail":
 			return <CircleXIcon className={cn("text-destructive", className)} />;
 		case "warn":
-			return <CircleAlertIcon className={cn("text-amber-600 dark:text-amber-400", className)} />;
+			return <CircleAlertIcon className={cn("text-[var(--warning)]", className)} />;
 		case "running":
-			return <ClockIcon className={cn("text-sky-600 dark:text-sky-400", className)} />;
+			return <ClockIcon className={cn("text-[var(--info)]", className)} />;
 		default:
 			return null;
 	}
@@ -396,7 +378,7 @@ function AttackerArtifacts({
 							openUrl: `/api/runs/${runId}/attempts/${attempt.id}/artifacts/${artifact.id}`,
 						})
 					}
-					className="flex flex-col items-start gap-1 rounded-md border bg-muted/30 p-2 text-left text-sm transition-colors hover:border-primary/50 hover:bg-muted/60"
+					className="flex flex-col items-start gap-1 rounded-md bg-muted p-2.5 text-left text-sm transition-colors hover:bg-accent"
 				>
 					<span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
 						{artifactKindLabel(artifact.kind)}
@@ -444,7 +426,7 @@ function RetrievalList({
 			{docs.map((document) => (
 				<li
 					key={`${document.rank}-${document.title}`}
-					className="flex items-start gap-2 rounded-md border bg-background px-2 py-1.5 text-sm"
+					className="flex items-start gap-2 rounded-md bg-muted px-2.5 py-1.5 text-sm"
 				>
 					<span className="font-mono text-xs text-muted-foreground tabular-nums">#{document.rank}</span>
 					<SourceBadge source={document.source} />
@@ -488,7 +470,7 @@ function DefenseList({
 			{dropped.map((entry, index) => (
 				<li
 					key={`${entry.title}-${index}`}
-					className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 px-2 py-1.5 text-sm"
+					className="flex items-start gap-2 rounded-md bg-[color-mix(in_oklch,var(--warning)_8%,transparent)] px-2.5 py-1.5 text-sm"
 				>
 					<SourceBadge source={entry.source} />
 					<div className="flex-1 min-w-0">
@@ -535,21 +517,21 @@ function StepList({
 				<li
 					key={step.id}
 					className={cn(
-						"flex items-start gap-2 rounded-md border px-2 py-2 text-sm",
+						"flex items-start gap-2 rounded-md px-2.5 py-2 text-sm",
 						step.passed
-							? "border-emerald-500/30 bg-emerald-500/5"
+							? "bg-[color-mix(in_oklch,var(--success)_8%,transparent)]"
 							: step.stepSnapshot.required
-								? "border-destructive/40 bg-destructive/5"
-								: "border-amber-500/30 bg-amber-500/5",
+								? "bg-[color-mix(in_oklch,var(--destructive)_8%,transparent)]"
+								: "bg-[color-mix(in_oklch,var(--warning)_8%,transparent)]",
 					)}
 				>
 					{step.passed ? (
-						<CircleCheckIcon className="mt-0.5 size-4 text-emerald-600 dark:text-emerald-400" />
+						<CircleCheckIcon className="mt-0.5 size-4 text-[var(--success)]" />
 					) : (
 						<CircleXIcon
 							className={cn(
 								"mt-0.5 size-4",
-								step.stepSnapshot.required ? "text-destructive" : "text-amber-600 dark:text-amber-400",
+								step.stepSnapshot.required ? "text-destructive" : "text-[var(--warning)]",
 							)}
 						/>
 					)}
@@ -593,12 +575,12 @@ function StepList({
 function SourceBadge({ source }: { source: string }) {
 	const tone =
 		source === "attacker"
-			? "bg-destructive/15 text-destructive border-destructive/30"
-			: "bg-emerald-500/15 text-emerald-700 border-emerald-500/30 dark:text-emerald-300";
+			? "bg-[color-mix(in_oklch,var(--destructive)_14%,transparent)] text-destructive"
+			: "bg-[color-mix(in_oklch,var(--success)_14%,transparent)] text-[var(--success)]";
 	return (
-		<Badge variant="outline" className={cn("h-5 border text-[10px] uppercase tracking-wide", tone)}>
+		<span className={cn("inline-flex h-5 items-center rounded px-1.5 text-[10px] font-medium uppercase tracking-wide", tone)}>
 			{source}
-		</Badge>
+		</span>
 	);
 }
 
@@ -619,13 +601,13 @@ function ToolCallList({
 			{toolCalls.map((call) => {
 				const tone =
 					call.status === "ok"
-						? "border-emerald-500/30 bg-emerald-500/5"
+						? "bg-[color-mix(in_oklch,var(--success)_8%,transparent)]"
 						: call.status === "blocked_by_defense"
-							? "border-amber-500/30 bg-amber-500/5"
-							: "border-destructive/40 bg-destructive/5";
+							? "bg-[color-mix(in_oklch,var(--warning)_8%,transparent)]"
+							: "bg-[color-mix(in_oklch,var(--destructive)_8%,transparent)]";
 				const statusLabel = call.status === "ok" ? "ok" : call.status === "blocked_by_defense" ? "blocked" : "error";
 				return (
-					<li key={call.id} className={cn("flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm", tone)}>
+					<li key={call.id} className={cn("flex items-start gap-2 rounded-md px-2.5 py-1.5 text-sm", tone)}>
 						<span className="font-mono text-xs text-muted-foreground tabular-nums">turn {call.turn}</span>
 						<Badge variant="outline" className="h-5 text-[10px] uppercase">
 							{statusLabel}

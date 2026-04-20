@@ -69,7 +69,7 @@ export function RunTree({ detail, onSelect }: Props) {
 
 	if (attempts.length === 0) {
 		return (
-			<div className="rounded-md border border-dashed p-6 text-sm text-muted-foreground">
+			<div className="rounded-md bg-muted/30 p-6 text-sm text-muted-foreground">
 				No attempts yet. The flow fills in as the engine completes each phase.
 			</div>
 		);

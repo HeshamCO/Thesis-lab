@@ -277,24 +277,37 @@ type ModelConnectionState = {
 
 const CONNECTION_BADGES: Record<ModelConnectionState["status"], React.ReactNode> = {
 	testing: (
-		<Badge variant="outline">
+		<Badge
+			variant="outline"
+			className="bg-[color-mix(in_oklch,var(--info)_12%,transparent)] text-[var(--info)]"
+		>
 			<Loader2Icon className="animate-spin" />
 			Testing
 		</Badge>
 	),
 	connected: (
-		<Badge className="bg-emerald-600 text-white">
+		<Badge
+			variant="outline"
+			className="bg-[color-mix(in_oklch,var(--success)_14%,transparent)] text-[var(--success)]"
+		>
 			<CircleCheckIcon />
 			Live
 		</Badge>
 	),
 	failed: (
-		<Badge variant="destructive">
+		<Badge
+			variant="outline"
+			className="bg-[color-mix(in_oklch,var(--destructive)_12%,transparent)] text-destructive"
+		>
 			<CircleXIcon />
 			Failed
 		</Badge>
 	),
-	unknown: <Badge variant="secondary">Not tested</Badge>,
+	unknown: (
+		<Badge variant="outline" className="bg-muted text-muted-foreground">
+			Not tested
+		</Badge>
+	),
 };
 
 function ModelConnectionBadge({ connection }: { connection: ModelConnectionState }) {

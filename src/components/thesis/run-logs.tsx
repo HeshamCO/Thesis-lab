@@ -171,7 +171,7 @@ export function RunLogs({ logs }: Props) {
 				</p>
 				<div className="flex flex-col gap-1">
 					{filtered.length === 0 ? (
-						<div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+						<div className="rounded-md bg-muted/30 p-4 text-sm text-muted-foreground">
 							No logs match the current filters.
 						</div>
 					) : (
@@ -187,7 +187,7 @@ function FriendlyLogs({ logs }: { logs: readonly RunLogRecord[] }) {
 	const groups = useMemo(() => groupByAttempt(logs), [logs]);
 	if (logs.length === 0) {
 		return (
-			<div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+			<div className="rounded-md bg-muted/30 p-4 text-sm text-muted-foreground">
 				Nothing to summarize. Adjust the filters in the Raw events tab to widen the set.
 			</div>
 		);
@@ -195,18 +195,18 @@ function FriendlyLogs({ logs }: { logs: readonly RunLogRecord[] }) {
 	return (
 		<div className="flex flex-col gap-3">
 			{groups.map((group) => (
-				<div key={group.key} className="rounded-md border bg-card">
-					<div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs">
-						<span className="font-semibold">{group.title}</span>
-						<span className="text-muted-foreground">{group.events.length} event(s)</span>
+				<div key={group.key} className="overflow-hidden rounded-md bg-muted/30">
+					<div className="flex items-center justify-between gap-2 px-3 py-2 text-xs">
+						<span className="font-semibold uppercase tracking-wider text-muted-foreground">{group.title}</span>
+						<span className="text-muted-foreground tabular-nums">{group.events.length} event{group.events.length === 1 ? "" : "s"}</span>
 					</div>
-					<ol className="m-0 flex flex-col gap-0 p-0">
+					<ol className="m-0 flex flex-col gap-0 bg-card p-0">
 						{group.events.map((log, index) => (
 							<li
 								key={log.id}
 								className={cn(
 									"flex items-start gap-3 px-3 py-2 text-sm",
-									index !== group.events.length - 1 && "border-b border-border/40",
+									index !== group.events.length - 1 && "border-b border-border/50",
 								)}
 							>
 								<span className="w-16 shrink-0 text-xs text-muted-foreground tabular-nums">
@@ -250,7 +250,8 @@ function groupByAttempt(logs: readonly RunLogRecord[]) {
 }
 
 function LevelDot({ level }: { level: RunLogRecord["level"] }) {
-	const className = level === "error" ? "bg-destructive" : level === "warn" ? "bg-amber-500" : "bg-emerald-500";
+	const className =
+		level === "error" ? "bg-destructive" : level === "warn" ? "bg-[var(--warning)]" : "bg-[var(--success)]";
 	return <span className={cn("mt-1.5 size-2 shrink-0 rounded-full", className)} aria-label={level} />;
 }
 
@@ -259,7 +260,7 @@ function LogRow({ log }: { log: RunLogRecord }) {
 	const payloadEmpty = Object.keys(log.payload).length === 0;
 	return (
 		<Collapsible open={open} onOpenChange={setOpen}>
-			<CollapsibleTrigger className="flex w-full items-start gap-3 rounded-md border bg-card px-3 py-2 text-left text-xs transition-colors hover:bg-muted/50">
+			<CollapsibleTrigger className="flex w-full items-start gap-3 rounded-md bg-muted px-3 py-2 text-left text-xs transition-colors hover:bg-accent">
 				<span className="w-20 shrink-0 text-muted-foreground tabular-nums">
 					{new Date(log.createdAt).toLocaleTimeString()}
 				</span>

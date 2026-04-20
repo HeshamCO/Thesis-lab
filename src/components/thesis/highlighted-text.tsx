@@ -41,8 +41,8 @@ export function HighlightedText({ text, steps, className, emptyText }: Props) {
 				}
 				const markClassName =
 					segment.tone === "match"
-						? "rounded bg-emerald-500/30 px-0.5 text-foreground"
-						: "rounded bg-destructive/30 px-0.5 text-foreground";
+						? "rounded bg-[color-mix(in_oklch,var(--success)_30%,transparent)] px-0.5 text-foreground"
+						: "rounded bg-[color-mix(in_oklch,var(--destructive)_30%,transparent)] px-0.5 text-foreground";
 				return (
 					<mark key={key} className={markClassName}>
 						{segment.text}
