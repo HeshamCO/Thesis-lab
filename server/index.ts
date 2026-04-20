@@ -136,8 +136,6 @@ app.get("/api/runs", (_request, response) => {
 
 app.post("/api/runs", (request, response) => {
 	const input = startRunInputSchema.parse(request.body);
-	console.log("input ==> ",input);
-	
 	const scenario = thesisDb.getScenario(input.scenarioId);
 	const defense = thesisDb.getDefense(input.defenseConfigId);
 	const attackerModel = thesisDb.getModel(input.attackerModelId);
