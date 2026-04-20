@@ -17,6 +17,7 @@ import { Progress } from "#/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useRunSocket } from "#/hooks/use-run-socket";
 import { api } from "#/lib/thesis/api";
+import { narrateRun } from "#/lib/thesis/attempt-narrative";
 import { queryKeys } from "#/lib/thesis/query";
 import { computeRunStats, formatDurationMs, formatPercent } from "#/lib/thesis/run-stats";
 import type { RunDetail } from "#/lib/thesis/schemas";
@@ -99,7 +100,7 @@ function RunDetailPage() {
 			<Tabs defaultValue="tree" className="gap-4">
 				<TabsList>
 					<TabsTrigger value="overview">Overview</TabsTrigger>
-					<TabsTrigger value="tree">Tree</TabsTrigger>
+					<TabsTrigger value="tree">Attempts</TabsTrigger>
 					<TabsTrigger value="artifacts">Artifacts</TabsTrigger>
 					<TabsTrigger value="logs">Logs</TabsTrigger>
 				</TabsList>
@@ -111,10 +112,13 @@ function RunDetailPage() {
 				<TabsContent value="tree" className="flex flex-col gap-3">
 					<Card>
 						<CardHeader>
-							<CardTitle>Attempt tree</CardTitle>
+							<CardTitle>Attempt walkthrough</CardTitle>
 							<CardDescription>
-								Trace each attempt through attacker → retrieval → defense → benign → step verdicts → feedback. Click any
-								leaf to open its full content.
+								Read each attempt as a 6-step story: attacker → retrieval → defense → benign response → step verdicts →
+								feedback. Use the timeline at the top or
+								<kbd className="mx-1 rounded border bg-muted px-1 font-mono text-[10px]">j</kbd>/
+								<kbd className="mx-1 rounded border bg-muted px-1 font-mono text-[10px]">k</kbd>
+								to step between attempts.
 							</CardDescription>
 						</CardHeader>
 						<CardContent>
@@ -159,8 +163,21 @@ function RunDetailPage() {
 
 function OverviewTab({ detail, progress }: { detail: RunDetail; progress: number }) {
 	const stats = computeRunStats(detail);
+	const summary = narrateRun(detail);
 	return (
 		<>
+			<Card>
+				<CardHeader>
+					<CardTitle>What happened</CardTitle>
+					<CardDescription>
+						Auto-generated summary of this run. Use the Attempts tab for the per-attempt walkthrough.
+					</CardDescription>
+				</CardHeader>
+				<CardContent>
+					<p className="m-0 text-sm leading-relaxed">{summary}</p>
+				</CardContent>
+			</Card>
+
 			<section className="grid gap-4 md:grid-cols-4">
 				<MetricCard
 					label="Status"

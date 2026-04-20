@@ -1,3 +1,4 @@
+import { formatDurationMs } from "./run-stats";
 import type { AttackerArtifact, AttemptRecord, RunDetail, RunLogRecord, StepResultRecord } from "./schemas";
 
 export type TreeNodeKind =
@@ -227,55 +228,46 @@ export function whyAttemptFailed(detail: RunDetail, attempt: AttemptRecord): str
 	return null;
 }
 
-function pickLog(logs: RunLogRecord[], eventType: string): RunLogRecord | null {
+export function pickLog(logs: readonly RunLogRecord[], eventType: string): RunLogRecord | null {
 	for (let index = logs.length - 1; index >= 0; index -= 1) {
-		if (logs[index]?.eventType === eventType) {
-			return logs[index] ?? null;
+		const log = logs[index];
+		if (log && log.eventType === eventType) {
+			return log;
 		}
 	}
 	return null;
 }
 
-function artifactKindOrder(kind: AttackerArtifact["kind"]) {
-	switch (kind) {
-		case "rationale":
-			return 0;
-		case "injection_prompt":
-			return 1;
-		case "injected_document":
-			return 2;
-		case "raw_output":
-			return 3;
-		default:
-			return 99;
-	}
+export function getAttemptNumber(log: RunLogRecord): number | null {
+	const value = (log.payload as { attemptNumber?: unknown }).attemptNumber;
+	return typeof value === "number" ? value : null;
 }
 
-function artifactKindLabel(kind: AttackerArtifact["kind"]) {
-	switch (kind) {
-		case "rationale":
-			return "Rationale";
-		case "injection_prompt":
-			return "Injection prompt";
-		case "injected_document":
-			return "Injected document";
-		case "raw_output":
-			return "Raw attacker output";
-		default:
-			return kind;
-	}
+const ARTIFACT_KIND_LABEL: Record<AttackerArtifact["kind"], string> = {
+	rationale: "Rationale",
+	injection_prompt: "Injection prompt",
+	injected_document: "Injected document",
+	raw_output: "Raw attacker output",
+};
+
+const ARTIFACT_KIND_ORDER: Record<AttackerArtifact["kind"], number> = {
+	rationale: 0,
+	injection_prompt: 1,
+	injected_document: 2,
+	raw_output: 3,
+};
+
+export function artifactKindOrder(kind: AttackerArtifact["kind"]) {
+	return ARTIFACT_KIND_ORDER[kind] ?? 99;
 }
 
-function truncate(value: string, max: number) {
-	return value.length <= max ? value : `${value.slice(0, max)}…`;
+export function artifactKindLabel(kind: AttackerArtifact["kind"]) {
+	return ARTIFACT_KIND_LABEL[kind] ?? kind;
 }
 
-function formatDuration(ms: number) {
-	if (!Number.isFinite(ms) || ms <= 0) {
-		return "—";
-	}
-	if (ms < 1000) {
-		return `${ms} ms`;
-	}
-	return `${(ms / 1000).toFixed(1)} s`;
+export function truncate(value: string, max: number) {
+	const trimmed = value.trim().replace(/\s+/g, " ");
+	return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`;
 }
+
+const formatDuration = formatDurationMs;
