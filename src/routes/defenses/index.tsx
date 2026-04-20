@@ -24,6 +24,7 @@ const emptyDefense: DefenseConfigInput = {
 	defensivePrompt: "",
 	blockedPatterns: [],
 	retrievalFilterEnabled: false,
+	allowedTools: [],
 };
 
 function DefensesPage() {
@@ -114,6 +115,17 @@ function DefensesPage() {
 									setForm({
 										...form,
 										blockedPatterns: splitLines(event.currentTarget.value),
+									})
+								}
+							/>
+						</Field>
+						<Field label="Allowed tools (one tool name per line — empty = no restriction)">
+							<Textarea
+								value={form.allowedTools.join("\n")}
+								onChange={(event) =>
+									setForm({
+										...form,
+										allowedTools: splitLines(event.currentTarget.value),
 									})
 								}
 							/>
@@ -224,5 +236,6 @@ function toDefenseInput(defense: DefenseConfig): DefenseConfigInput {
 		defensivePrompt: defense.defensivePrompt,
 		blockedPatterns: defense.blockedPatterns,
 		retrievalFilterEnabled: defense.retrievalFilterEnabled,
+		allowedTools: defense.allowedTools,
 	};
 }

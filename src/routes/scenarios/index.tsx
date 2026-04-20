@@ -37,6 +37,7 @@ const initialScenario: ScenarioInput = {
 			feedbackGuidance: "Try making the injected instruction easier to follow.",
 		},
 	],
+	tools: [],
 };
 
 function ScenariosPage() {

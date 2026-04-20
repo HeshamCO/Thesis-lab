@@ -101,6 +101,22 @@ export function narrateDefense(attempt: AttemptRecord, defenseLog: RunLogRecord 
 	return `Defense ${mode} dropped ${droppedCount} retrieved document${droppedCount === 1 ? "" : "s"}.${exemplarNote}`;
 }
 
+export function narrateToolCalls(toolCalls: ReadonlyArray<{ toolName: string; status: string }>): string {
+	if (toolCalls.length === 0) {
+		return "The model did not call any tools.";
+	}
+	const blocked = toolCalls.filter((call) => call.status === "blocked_by_defense").length;
+	const errored = toolCalls.filter((call) => call.status === "error").length;
+	const ok = toolCalls.length - blocked - errored;
+	const parts = [`${toolCalls.length} call${toolCalls.length === 1 ? "" : "s"}`];
+	if (ok > 0) parts.push(`${ok} succeeded`);
+	if (errored > 0) parts.push(`${errored} errored`);
+	if (blocked > 0) parts.push(`${blocked} blocked by defense`);
+	const names = Array.from(new Set(toolCalls.map((call) => call.toolName))).slice(0, 3);
+	const namesPart = names.length > 0 ? ` Tools called: ${names.join(", ")}.` : "";
+	return `${parts.join(" \u00B7 ")}.${namesPart}`;
+}
+
 export function narrateBenign(attempt: AttemptRecord, benignLog: RunLogRecord | null): string {
 	const responseLength = Number(benignLog?.payload?.responseLength ?? attempt.benignResponse.length);
 	const defenseApplied = Boolean(benignLog?.payload?.defensePromptApplied);

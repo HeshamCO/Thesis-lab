@@ -2,7 +2,17 @@ import { z } from "zod";
 
 export const defenseModeSchema = z.enum(["none", "prompt_guard", "retrieval_filter", "combined"]);
 
-export const evaluatorTypeSchema = z.enum(["contains_text", "not_contains_text", "regex", "llm_judge"]);
+export const evaluatorTypeSchema = z.enum([
+	"contains_text",
+	"not_contains_text",
+	"regex",
+	"llm_judge",
+	"tool_called",
+	"tool_not_called",
+	"tool_called_with",
+]);
+
+export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
 export const runStatusSchema = z.enum(["queued", "running", "pausing", "paused", "completed", "failed"]);
 
@@ -37,6 +47,33 @@ export const scenarioDocumentInputSchema = z.object({
 	content: z.string().trim().min(1),
 });
 
+export const toolExecutorSchema = z.discriminatedUnion("kind", [
+	z.object({
+		kind: z.literal("mock"),
+		returnValue: z.unknown(),
+	}),
+	z.object({
+		kind: z.literal("http"),
+		method: z.enum(["GET", "POST", "PUT", "DELETE"]).default("POST"),
+		url: z.string().trim().url(),
+		headers: z.record(z.string(), z.string()).optional().default({}),
+		timeoutMs: z.coerce.number().int().min(100).max(30_000).default(5_000),
+	}),
+]);
+
+export const toolDefinitionInputSchema = z.object({
+	id: z.string().optional(),
+	orderIndex: z.coerce.number().int().min(0),
+	name: z
+		.string()
+		.trim()
+		.min(1)
+		.regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, "Tool name must match /^[a-zA-Z_][a-zA-Z0-9_]*$/"),
+	description: z.string().trim().min(1),
+	parameters: z.record(z.string(), z.unknown()).default({ type: "object", properties: {} }),
+	executor: toolExecutorSchema,
+});
+
 export const scenarioInputSchema = z.object({
 	name: z.string().trim().min(1),
 	description: z.string().trim().optional().default(""),
@@ -46,6 +83,7 @@ export const scenarioInputSchema = z.object({
 	notes: z.string().trim().optional().default(""),
 	documents: z.array(scenarioDocumentInputSchema).default([]),
 	successSteps: z.array(successStepInputSchema).min(1),
+	tools: z.array(toolDefinitionInputSchema).default([]),
 });
 
 export const modelConfigInputSchema = z.object({
@@ -64,6 +102,7 @@ export const defenseConfigInputSchema = z.object({
 	defensivePrompt: z.string().trim().optional().default(""),
 	blockedPatterns: z.array(z.string().trim().min(1)).default([]),
 	retrievalFilterEnabled: z.coerce.boolean().default(false),
+	allowedTools: z.array(z.string().trim().min(1)).default([]),
 });
 
 export const startRunInputSchema = z.object({
@@ -77,6 +116,8 @@ export const startRunInputSchema = z.object({
 
 export type DefenseMode = z.infer<typeof defenseModeSchema>;
 export type EvaluatorType = z.infer<typeof evaluatorTypeSchema>;
+export type ToolDefinitionInput = z.infer<typeof toolDefinitionInputSchema>;
+export type ToolExecutor = z.infer<typeof toolExecutorSchema>;
 export type RunStatus = z.infer<typeof runStatusSchema>;
 export type AttemptStatus = z.infer<typeof attemptStatusSchema>;
 export type RetrievalSettings = z.infer<typeof retrievalSettingsSchema>;
@@ -156,6 +197,7 @@ export type AttemptRecord = {
 	benignDurationMs: number;
 	totalDurationMs: number;
 	defenseFilteredCount: number;
+	toolCallsCount: number;
 	createdAt: string;
 	completedAt: string | null;
 };
@@ -198,6 +240,23 @@ export type RunLogRecord = {
 	createdAt: string;
 };
 
+export const TOOL_CALL_STATUSES = ["ok", "error", "blocked_by_defense"] as const;
+export type ToolCallStatus = (typeof TOOL_CALL_STATUSES)[number];
+
+export type ToolCallRecord = {
+	id: string;
+	runId: string;
+	attemptId: string;
+	turn: number;
+	toolName: string;
+	arguments: Record<string, unknown>;
+	result: unknown;
+	status: ToolCallStatus;
+	durationMs: number;
+	error: string;
+	createdAt: string;
+};
+
 export type RunDetail = RunListItem & {
 	scenarioSnapshot: Scenario;
 	defenseSnapshot: DefenseConfig;
@@ -208,4 +267,5 @@ export type RunDetail = RunListItem & {
 	stepResults: StepResultRecord[];
 	logs: RunLogRecord[];
 	attackerArtifacts: AttackerArtifact[];
+	toolCalls: ToolCallRecord[];
 };

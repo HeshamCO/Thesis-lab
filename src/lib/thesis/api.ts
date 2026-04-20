@@ -13,12 +13,14 @@ import type {
 	ScenarioInput,
 	StartRunInput,
 	StepResultRecord,
+	ToolCallRecord,
 } from "./schemas";
 
 export type AttemptDetail = {
 	attempt: AttemptRecord;
 	stepResults: StepResultRecord[];
 	artifacts: AttackerArtifact[];
+	toolCalls: ToolCallRecord[];
 	logs: RunLogRecord[];
 };
 

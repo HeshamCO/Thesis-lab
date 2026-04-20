@@ -10,6 +10,7 @@ import {
 	ScrollTextIcon,
 	SearchIcon,
 	ShieldIcon,
+	WrenchIcon,
 } from "lucide-react";
 import { useId, useMemo, useState } from "react";
 import { Badge } from "#/components/ui/badge";
@@ -26,11 +27,19 @@ import {
 	narrateRetrieval,
 	narrateStepResult,
 	narrateSteps,
+	narrateToolCalls,
 	preview,
 } from "#/lib/thesis/attempt-narrative";
 import { artifactKindLabel, artifactKindOrder, getAttemptNumber } from "#/lib/thesis/run-tree";
 import { formatDurationMs } from "#/lib/thesis/run-stats";
-import type { AttackerArtifact, AttemptRecord, RunDetail, RunLogRecord, StepResultRecord } from "#/lib/thesis/schemas";
+import type {
+	AttackerArtifact,
+	AttemptRecord,
+	RunDetail,
+	RunLogRecord,
+	StepResultRecord,
+	ToolCallRecord,
+} from "#/lib/thesis/schemas";
 import type { ArtifactPanelPayload } from "./artifact-panel";
 import { HighlightedText } from "./highlighted-text";
 
@@ -66,16 +75,25 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 	const headline = narrateAttempt(detail, attempt);
 	const stepResults = useMemo(
 		() =>
-			detail.stepResults.filter((step) => step.attemptId === attempt.id).sort((a, b) => a.orderIndex - b.orderIndex),
+			(detail.stepResults ?? [])
+				.filter((step) => step.attemptId === attempt.id)
+				.sort((a, b) => a.orderIndex - b.orderIndex),
 		[attempt.id, detail.stepResults],
 	);
 	const artifacts = useMemo(
-		() => detail.attackerArtifacts.filter((artifact) => artifact.attemptId === attempt.id),
+		() => (detail.attackerArtifacts ?? []).filter((artifact) => artifact.attemptId === attempt.id),
 		[attempt.id, detail.attackerArtifacts],
+	);
+	const toolCalls = useMemo(
+		() =>
+			(detail.toolCalls ?? [])
+				.filter((call) => call.attemptId === attempt.id)
+				.sort((a, b) => a.turn - b.turn || Date.parse(a.createdAt) - Date.parse(b.createdAt)),
+		[attempt.id, detail.toolCalls],
 	);
 	const attemptLogs = useMemo(() => {
 		const latest: Partial<Record<(typeof ATTEMPT_LOG_EVENTS)[number], RunLogRecord>> = {};
-		for (const log of detail.logs) {
+		for (const log of detail.logs ?? []) {
 			if (getAttemptNumber(log) !== attempt.attemptNumber) {
 				continue;
 			}
@@ -163,6 +181,26 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 
 				<PhaseCard
 					number={5}
+					icon={WrenchIcon}
+					title="Tool calls"
+					meta={toolCalls.length === 0 ? "no calls" : `${toolCalls.length} call${toolCalls.length === 1 ? "" : "s"}`}
+					narrative={narrateToolCalls(toolCalls)}
+					tone={
+						toolCalls.length === 0
+							? "info"
+							: toolCalls.some((call) => call.status === "error" || call.status === "blocked_by_defense")
+								? "warn"
+								: "info"
+					}
+					defaultOpen={toolCalls.length > 0}
+				>
+					<ToolCallList toolCalls={toolCalls} onSelect={onSelect} attempt={attempt} />
+				</PhaseCard>
+
+				<PhaseConnector />
+
+				<PhaseCard
+					number={6}
 					icon={CircleCheckIcon}
 					title="Step results"
 					meta={`${stepResults.filter((step) => step.passed).length}/${stepResults.length} passed`}
@@ -184,7 +222,7 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 				<PhaseConnector />
 
 				<PhaseCard
-					number={6}
+					number={7}
 					icon={ScrollTextIcon}
 					title="Feedback to next attempt"
 					meta={attempt.feedback ? `${attempt.feedback.length.toLocaleString()} chars` : "—"}
@@ -561,5 +599,63 @@ function SourceBadge({ source }: { source: string }) {
 		<Badge variant="outline" className={cn("h-5 border text-[10px] uppercase tracking-wide", tone)}>
 			{source}
 		</Badge>
+	);
+}
+
+function ToolCallList({
+	toolCalls,
+	onSelect,
+	attempt,
+}: {
+	toolCalls: readonly ToolCallRecord[];
+	onSelect: (payload: ArtifactPanelPayload) => void;
+	attempt: AttemptRecord;
+}) {
+	if (toolCalls.length === 0) {
+		return <p className="m-0 text-sm text-muted-foreground italic">The model did not call any tools this attempt.</p>;
+	}
+	return (
+		<ol className="m-0 flex flex-col gap-1.5 p-0">
+			{toolCalls.map((call) => {
+				const tone =
+					call.status === "ok"
+						? "border-emerald-500/30 bg-emerald-500/5"
+						: call.status === "blocked_by_defense"
+							? "border-amber-500/30 bg-amber-500/5"
+							: "border-destructive/40 bg-destructive/5";
+				const statusLabel = call.status === "ok" ? "ok" : call.status === "blocked_by_defense" ? "blocked" : "error";
+				return (
+					<li key={call.id} className={cn("flex items-start gap-2 rounded-md border px-2 py-1.5 text-sm", tone)}>
+						<span className="font-mono text-xs text-muted-foreground tabular-nums">turn {call.turn}</span>
+						<Badge variant="outline" className="h-5 text-[10px] uppercase">
+							{statusLabel}
+						</Badge>
+						<div className="flex-1 min-w-0">
+							<button
+								type="button"
+								onClick={() =>
+									onSelect({
+										id: call.id,
+										title: `${call.toolName} (turn ${call.turn})`,
+										subtitle: `Attempt ${attempt.attemptNumber} · ${call.status} · ${call.durationMs} ms`,
+										tags: [`tool=${call.toolName}`, `status=${call.status}`],
+										body: JSON.stringify(
+											{ arguments: call.arguments, result: call.result, error: call.error || undefined },
+											null,
+											2,
+										),
+										contentType: "json",
+									})
+								}
+								className="m-0 truncate text-left text-sm font-mono hover:underline"
+							>
+								{call.toolName}({preview(JSON.stringify(call.arguments), 80)})
+							</button>
+						</div>
+						<span className="text-xs text-muted-foreground tabular-nums">{call.durationMs} ms</span>
+					</li>
+				);
+			})}
+		</ol>
 	);
 }

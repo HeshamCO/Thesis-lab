@@ -14,7 +14,13 @@ import { Separator } from "#/components/ui/separator";
 import { Textarea } from "#/components/ui/textarea";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type { EvaluatorType, ScenarioDocumentInput, ScenarioInput, SuccessStepInput } from "#/lib/thesis/schemas";
+import type {
+	EvaluatorType,
+	ScenarioDocumentInput,
+	ScenarioInput,
+	SuccessStepInput,
+	ToolDefinitionInput,
+} from "#/lib/thesis/schemas";
 
 export const Route = createFileRoute("/scenarios/$scenarioId")({
 	component: ScenarioDetailPage,
@@ -41,6 +47,7 @@ function ScenarioDetailPage() {
 				notes: scenario.data.notes,
 				documents: scenario.data.documents,
 				successSteps: scenario.data.successSteps,
+				tools: scenario.data.tools,
 			});
 		}
 	}, [scenario.data]);
@@ -236,6 +243,58 @@ function ScenarioDetailPage() {
 					</Button>
 				</CardContent>
 			</Card>
+
+			<Card>
+				<CardHeader>
+					<CardTitle>Tools</CardTitle>
+					<CardDescription>
+						Tools the benign assistant can call. Use the `tool_called` / `tool_called_with` / `tool_not_called`
+						evaluators on a success step to score whether the attack landed.
+					</CardDescription>
+				</CardHeader>
+				<CardContent className="flex flex-col gap-4">
+					{form.tools.map((tool, index) => (
+						<ToolEditor
+							key={index}
+							tool={tool}
+							onChange={(next) =>
+								setForm({
+									...form,
+									tools: replaceAt(form.tools, index, next),
+								})
+							}
+							onRemove={() =>
+								setForm({
+									...form,
+									tools: form.tools.filter((_, itemIndex) => itemIndex !== index),
+								})
+							}
+						/>
+					))}
+					<Button
+						variant="outline"
+						type="button"
+						onClick={() =>
+							setForm({
+								...form,
+								tools: [
+									...form.tools,
+									{
+										orderIndex: form.tools.length,
+										name: "",
+										description: "",
+										parameters: { type: "object", properties: {} },
+										executor: { kind: "mock", returnValue: null },
+									},
+								],
+							})
+						}
+					>
+						<PlusIcon data-icon="inline-start" />
+						Add tool
+					</Button>
+				</CardContent>
+			</Card>
 		</>
 	);
 }
@@ -270,6 +329,147 @@ function DocumentEditor({
 	);
 }
 
+function ToolEditor({
+	tool,
+	onChange,
+	onRemove,
+}: {
+	tool: ToolDefinitionInput;
+	onChange: (tool: ToolDefinitionInput) => void;
+	onRemove: () => void;
+}) {
+	const [parametersText, setParametersText] = useState(() => JSON.stringify(tool.parameters, null, 2));
+	const [parametersError, setParametersError] = useState<string | null>(null);
+	const [returnValueText, setReturnValueText] = useState(() =>
+		tool.executor.kind === "mock" ? JSON.stringify(tool.executor.returnValue ?? null, null, 2) : "",
+	);
+	const [returnValueError, setReturnValueError] = useState<string | null>(null);
+
+	return (
+		<div className="flex flex-col gap-3 rounded-lg border p-4">
+			<div className="grid gap-3 md:grid-cols-2">
+				<Field label="Name (matches /^[a-zA-Z_][a-zA-Z0-9_]*$/)">
+					<Input value={tool.name} onChange={(event) => onChange({ ...tool, name: event.currentTarget.value })} />
+				</Field>
+				<Field label="Executor">
+					<Select
+						value={tool.executor.kind}
+						onValueChange={(value) =>
+							onChange({
+								...tool,
+								executor:
+									value === "http"
+										? { kind: "http", method: "POST", url: "", headers: {}, timeoutMs: 5000 }
+										: { kind: "mock", returnValue: null },
+							})
+						}
+					>
+						<SelectTrigger>
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectGroup>
+								<SelectItem value="mock">Mock (literal return)</SelectItem>
+								<SelectItem value="http">HTTP (call URL)</SelectItem>
+							</SelectGroup>
+						</SelectContent>
+					</Select>
+				</Field>
+			</div>
+			<Field label="Description (sent to the model)">
+				<Textarea
+					value={tool.description}
+					onChange={(event) => onChange({ ...tool, description: event.currentTarget.value })}
+				/>
+			</Field>
+			<Field label="Parameters (JSON Schema)">
+				<Textarea
+					value={parametersText}
+					onChange={(event) => {
+						const next = event.currentTarget.value;
+						setParametersText(next);
+						try {
+							const parsed = JSON.parse(next) as Record<string, unknown>;
+							setParametersError(null);
+							onChange({ ...tool, parameters: parsed });
+						} catch (error) {
+							setParametersError(error instanceof Error ? error.message : "Invalid JSON");
+						}
+					}}
+				/>
+				{parametersError ? <p className="m-0 text-xs text-destructive">{parametersError}</p> : null}
+			</Field>
+			{tool.executor.kind === "mock" ? (
+				<Field label="Mock return value (JSON)">
+					<Textarea
+						value={returnValueText}
+						onChange={(event) => {
+							const next = event.currentTarget.value;
+							setReturnValueText(next);
+							try {
+								const parsed = JSON.parse(next);
+								setReturnValueError(null);
+								onChange({ ...tool, executor: { kind: "mock", returnValue: parsed } });
+							} catch (error) {
+								setReturnValueError(error instanceof Error ? error.message : "Invalid JSON");
+							}
+						}}
+					/>
+					{returnValueError ? <p className="m-0 text-xs text-destructive">{returnValueError}</p> : null}
+				</Field>
+			) : (
+				<HttpExecutorEditor executor={tool.executor} onChange={(executor) => onChange({ ...tool, executor })} />
+			)}
+			<Button variant="ghost" type="button" onClick={onRemove}>
+				Remove tool
+			</Button>
+		</div>
+	);
+}
+
+type HttpExecutor = Extract<ToolDefinitionInput["executor"], { kind: "http" }>;
+
+function HttpExecutorEditor({
+	executor,
+	onChange,
+}: {
+	executor: HttpExecutor;
+	onChange: (executor: HttpExecutor) => void;
+}) {
+	return (
+		<div className="grid gap-3 md:grid-cols-[8rem_1fr_8rem]">
+			<Field label="Method">
+				<Select
+					value={executor.method}
+					onValueChange={(value) => onChange({ ...executor, method: value as HttpExecutor["method"] })}
+				>
+					<SelectTrigger>
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectGroup>
+							<SelectItem value="GET">GET</SelectItem>
+							<SelectItem value="POST">POST</SelectItem>
+							<SelectItem value="PUT">PUT</SelectItem>
+							<SelectItem value="DELETE">DELETE</SelectItem>
+						</SelectGroup>
+					</SelectContent>
+				</Select>
+			</Field>
+			<Field label="URL">
+				<Input value={executor.url} onChange={(event) => onChange({ ...executor, url: event.currentTarget.value })} />
+			</Field>
+			<Field label="Timeout (ms)">
+				<Input
+					type="number"
+					value={executor.timeoutMs}
+					onChange={(event) => onChange({ ...executor, timeoutMs: Number(event.currentTarget.value) || 5000 })}
+				/>
+			</Field>
+		</div>
+	);
+}
+
 function StepEditor({
 	step,
 	onChange,
@@ -284,7 +484,18 @@ function StepEditor({
 			? step.evaluatorConfig.pattern
 			: typeof step.evaluatorConfig.target === "string"
 				? step.evaluatorConfig.target
-				: "";
+				: typeof step.evaluatorConfig.rubric === "string"
+					? step.evaluatorConfig.rubric
+					: "";
+	const toolName = typeof step.evaluatorConfig.toolName === "string" ? step.evaluatorConfig.toolName : "";
+	const argumentMatchers =
+		step.evaluatorConfig.argumentMatchers && typeof step.evaluatorConfig.argumentMatchers === "object"
+			? (step.evaluatorConfig.argumentMatchers as Record<string, string>)
+			: {};
+	const isToolEval =
+		step.evaluatorType === "tool_called" ||
+		step.evaluatorType === "tool_not_called" ||
+		step.evaluatorType === "tool_called_with";
 
 	return (
 		<div className="flex flex-col gap-4 rounded-lg border p-4">
@@ -311,7 +522,11 @@ function StepEditor({
 							onChange({
 								...step,
 								evaluatorType: value as EvaluatorType,
-								evaluatorConfig: value === "regex" ? { pattern: configValue } : { target: configValue },
+								evaluatorConfig: nextEvaluatorConfig(value as EvaluatorType, {
+									previousValue: configValue,
+									previousToolName: toolName,
+									previousMatchers: argumentMatchers,
+								}),
 							})
 						}
 					>
@@ -324,6 +539,9 @@ function StepEditor({
 								<SelectItem value="not_contains_text">Avoids text</SelectItem>
 								<SelectItem value="regex">Regex</SelectItem>
 								<SelectItem value="llm_judge">LLM judge</SelectItem>
+								<SelectItem value="tool_called">Tool called</SelectItem>
+								<SelectItem value="tool_not_called">Tool not called</SelectItem>
+								<SelectItem value="tool_called_with">Tool called with args</SelectItem>
 							</SelectGroup>
 						</SelectContent>
 					</Select>
@@ -335,20 +553,59 @@ function StepEditor({
 					onChange={(event) => onChange({ ...step, description: event.currentTarget.value })}
 				/>
 			</Field>
-			<Field label="Evaluator target, pattern, or rubric">
-				<Input
-					value={configValue}
-					onChange={(event) =>
-						onChange({
-							...step,
-							evaluatorConfig:
-								step.evaluatorType === "regex"
-									? { pattern: event.currentTarget.value }
-									: { target: event.currentTarget.value },
-						})
-					}
-				/>
-			</Field>
+			{isToolEval ? (
+				<>
+					<Field label="Tool name">
+						<Input
+							value={toolName}
+							onChange={(event) => {
+								const nextName = event.currentTarget.value;
+								onChange({
+									...step,
+									evaluatorConfig:
+										step.evaluatorType === "tool_called_with"
+											? { toolName: nextName, argumentMatchers }
+											: { toolName: nextName },
+								});
+							}}
+						/>
+					</Field>
+					{step.evaluatorType === "tool_called_with" ? (
+						<Field label="Argument matchers (one `key=regex` per line)">
+							<Textarea
+								value={Object.entries(argumentMatchers)
+									.map(([key, pattern]) => `${key}=${pattern}`)
+									.join("\n")}
+								onChange={(event) =>
+									onChange({
+										...step,
+										evaluatorConfig: {
+											toolName,
+											argumentMatchers: parseArgumentMatchers(event.currentTarget.value),
+										},
+									})
+								}
+							/>
+						</Field>
+					) : null}
+				</>
+			) : (
+				<Field label="Evaluator target, pattern, or rubric">
+					<Input
+						value={configValue}
+						onChange={(event) =>
+							onChange({
+								...step,
+								evaluatorConfig: nextEvaluatorConfig(step.evaluatorType, {
+									previousValue: event.currentTarget.value,
+									previousToolName: toolName,
+									previousMatchers: argumentMatchers,
+								}),
+							})
+						}
+					/>
+				</Field>
+			)}
 			<Field label="Feedback guidance">
 				<Textarea
 					value={step.feedbackGuidance}
@@ -397,5 +654,48 @@ function normalizeScenario(form: ScenarioInput): ScenarioInput {
 		successSteps: form.successSteps
 			.map((step, index) => ({ ...step, orderIndex: index }))
 			.filter((step) => step.name.trim()),
+		tools: form.tools.map((tool, index) => ({ ...tool, orderIndex: index })).filter((tool) => tool.name.trim()),
 	};
+}
+
+function nextEvaluatorConfig(
+	type: EvaluatorType,
+	context: {
+		previousValue: string;
+		previousToolName: string;
+		previousMatchers: Record<string, string>;
+	},
+): Record<string, unknown> {
+	switch (type) {
+		case "regex":
+			return { pattern: context.previousValue };
+		case "llm_judge":
+			return { rubric: context.previousValue };
+		case "tool_called":
+		case "tool_not_called":
+			return { toolName: context.previousToolName };
+		case "tool_called_with":
+			return {
+				toolName: context.previousToolName,
+				argumentMatchers: context.previousMatchers,
+			};
+		default:
+			return { target: context.previousValue };
+	}
+}
+
+function parseArgumentMatchers(value: string): Record<string, string> {
+	const out: Record<string, string> = {};
+	for (const line of value.split("\n")) {
+		const trimmed = line.trim();
+		if (!trimmed) continue;
+		const eq = trimmed.indexOf("=");
+		if (eq <= 0) continue;
+		const key = trimmed.slice(0, eq).trim();
+		const pattern = trimmed.slice(eq + 1).trim();
+		if (key && pattern) {
+			out[key] = pattern;
+		}
+	}
+	return out;
 }

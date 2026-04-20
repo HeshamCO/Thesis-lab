@@ -108,7 +108,7 @@ export function RunArtifacts({ detail, onSelect }: Props) {
 
 function buildRows(detail: RunDetail): Row[] {
 	const attemptByNumber = new Map(detail.attempts.map((attempt) => [attempt.id, attempt.attemptNumber]));
-	const artifactRows: Row[] = detail.attackerArtifacts.map((artifact: AttackerArtifact) => ({
+	const artifactRows: Row[] = (detail.attackerArtifacts ?? []).map((artifact: AttackerArtifact) => ({
 		id: artifact.id,
 		attemptNumber: attemptByNumber.get(artifact.attemptId) ?? null,
 		source: "attacker",

@@ -116,6 +116,7 @@ function sampleScenario(name: string): ScenarioInput {
 				feedbackGuidance: "The next injected document must be more persuasive.",
 			},
 		],
+		tools: [],
 	};
 }
 

@@ -67,3 +67,27 @@ export const attackerArtifacts = sqliteTable("attacker_artifacts", {
 	content: text("content").notNull(),
 	createdAt: text("created_at").notNull(),
 });
+
+export const scenarioTools = sqliteTable("scenario_tools", {
+	id: text("id").primaryKey(),
+	scenarioId: text("scenario_id").notNull(),
+	orderIndex: integer("order_index").notNull(),
+	name: text("name").notNull(),
+	description: text("description").notNull(),
+	parameters: text("parameters", { mode: "json" }).notNull(),
+	executor: text("executor", { mode: "json" }).notNull(),
+});
+
+export const toolCalls = sqliteTable("tool_calls", {
+	id: text("id").primaryKey(),
+	runId: text("run_id").notNull(),
+	attemptId: text("attempt_id").notNull(),
+	turn: integer("turn").notNull(),
+	toolName: text("tool_name").notNull(),
+	arguments: text("arguments", { mode: "json" }).notNull(),
+	result: text("result", { mode: "json" }).notNull(),
+	status: text("status").notNull(),
+	durationMs: integer("duration_ms").notNull(),
+	error: text("error").notNull().default(""),
+	createdAt: text("created_at").notNull(),
+});

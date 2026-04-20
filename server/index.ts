@@ -175,10 +175,11 @@ app.get("/api/runs/:id/attempts/:attemptId", (request, response) => {
 	const artifacts = run.attackerArtifacts.filter(
 		(artifact) => artifact.attemptId === attempt.id,
 	);
+	const toolCalls = run.toolCalls.filter((call) => call.attemptId === attempt.id);
 	const logs = run.logs.filter(
 		(log) => (log.payload as { attemptNumber?: number })?.attemptNumber === attempt.attemptNumber,
 	);
-	response.json({ attempt, stepResults, artifacts, logs });
+	response.json({ attempt, stepResults, artifacts, toolCalls, logs });
 });
 
 app.get(
@@ -232,6 +233,7 @@ app.get("/api/runs/:id/export.csv", (request, response) => {
 			"benignDurationMs",
 			"totalDurationMs",
 			"defenseFilteredCount",
+			"toolCallsCount",
 			"rawAttackerParseOk",
 			"stepOrder",
 			"stepName",
@@ -260,6 +262,7 @@ app.get("/api/runs/:id/export.csv", (request, response) => {
 			String(attempt.benignDurationMs),
 			String(attempt.totalDurationMs),
 			String(attempt.defenseFilteredCount),
+			String(attempt.toolCallsCount),
 			String(attempt.rawAttackerParseOk),
 		];
 		if (attemptSteps.length === 0) {
@@ -283,6 +286,51 @@ app.get("/api/runs/:id/export.csv", (request, response) => {
 	response.setHeader(
 		"Content-Disposition",
 		`attachment; filename="run-${run.id}.csv"`,
+	);
+	response.send(rows.map((row) => row.map(csvCell).join(",")).join("\n"));
+});
+
+app.get("/api/runs/:id/export.tool-calls.csv", (request, response) => {
+	const run = thesisDb.getRun(request.params.id);
+	const attemptByIdNumber = new Map(run.attempts.map((attempt) => [attempt.id, attempt.attemptNumber]));
+	const rows = [
+		[
+			"runId",
+			"scenarioName",
+			"defenseName",
+			"defenseMode",
+			"attemptNumber",
+			"turn",
+			"toolName",
+			"status",
+			"durationMs",
+			"argumentsJson",
+			"resultJson",
+			"error",
+			"createdAt",
+		],
+	];
+	for (const call of run.toolCalls) {
+		rows.push([
+			run.id,
+			run.scenarioName,
+			run.defenseName,
+			run.defenseSnapshot.mode,
+			String(attemptByIdNumber.get(call.attemptId) ?? ""),
+			String(call.turn),
+			call.toolName,
+			call.status,
+			String(call.durationMs),
+			JSON.stringify(call.arguments),
+			JSON.stringify(call.result ?? null),
+			call.error,
+			call.createdAt,
+		]);
+	}
+	response.setHeader("Content-Type", "text/csv");
+	response.setHeader(
+		"Content-Disposition",
+		`attachment; filename="run-${run.id}-tool-calls.csv"`,
 	);
 	response.send(rows.map((row) => row.map(csvCell).join(",")).join("\n"));
 });

@@ -89,6 +89,7 @@ function sampleRunDetail(): RunDetail {
 		benignDurationMs: 320,
 		totalDurationMs: 900,
 		defenseFilteredCount: 1,
+		toolCallsCount: 0,
 		createdAt: "2026-04-20T10:00:00.000Z",
 		completedAt: "2026-04-20T10:00:00.900Z",
 	};
@@ -222,6 +223,7 @@ function sampleRunDetail(): RunDetail {
 			notes: "",
 			documents: [],
 			successSteps: [stepResult.stepSnapshot],
+			tools: [],
 			createdAt: attempt.createdAt,
 			updatedAt: attempt.createdAt,
 		},
@@ -232,6 +234,7 @@ function sampleRunDetail(): RunDetail {
 			defensivePrompt: "",
 			blockedPatterns: ["ignore"],
 			retrievalFilterEnabled: false,
+			allowedTools: [],
 			createdAt: attempt.createdAt,
 			updatedAt: attempt.createdAt,
 		},
@@ -264,5 +267,6 @@ function sampleRunDetail(): RunDetail {
 		stepResults: [stepResult],
 		logs,
 		attackerArtifacts: artifacts,
+		toolCalls: [],
 	};
 }
