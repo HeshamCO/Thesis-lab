@@ -1,9 +1,9 @@
 import { CopyIcon } from "lucide-react";
-import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Badge } from "#/components/ui/badge";
 import { Button } from "#/components/ui/button";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "#/components/ui/sheet";
+import { HighlightedText } from "./highlighted-text";
 
 export type ArtifactPanelPayload = {
 	id: string;
@@ -34,20 +34,6 @@ export function ArtifactPanel({ payload, onClose }: { payload: ArtifactPanelPayl
 }
 
 function ArtifactPanelBody({ payload }: { payload: ArtifactPanelPayload }) {
-	const [pretty, setPretty] = useState(payload.body);
-
-	useEffect(() => {
-		if (payload.contentType !== "json") {
-			setPretty(payload.body);
-			return;
-		}
-		try {
-			setPretty(JSON.stringify(JSON.parse(payload.body), null, 2));
-		} catch {
-			setPretty(payload.body);
-		}
-	}, [payload.body, payload.contentType]);
-
 	const copy = async () => {
 		try {
 			await navigator.clipboard.writeText(payload.body);
@@ -85,9 +71,12 @@ function ArtifactPanelBody({ payload }: { payload: ArtifactPanelPayload }) {
 					</Button>
 				) : null}
 			</div>
-			<pre className="m-0 mx-4 mb-4 flex-1 overflow-auto rounded-md bg-muted p-3 text-xs whitespace-pre-wrap break-words">
-				{pretty || "(empty)"}
-			</pre>
+			<HighlightedText
+				text={payload.body}
+				steps={[]}
+				emptyText="(empty)"
+				className="mx-4 mb-4 flex-1 overflow-auto"
+			/>
 		</>
 	);
 }

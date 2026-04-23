@@ -71,10 +71,8 @@ export function getJudgePrompt(id: string): JudgePromptVersion {
 }
 
 export type {
-	AttackEffect,
 	AttackerBuildParams,
 	AttackerPromptVersion,
-	AttackTelemetry,
 	AttemptHistoryEntry,
 	BenignBuildParams,
 	BenignPromptVersion,
@@ -82,5 +80,4 @@ export type {
 	BuiltPrompt,
 	JudgeBuildParams,
 	JudgePromptVersion,
-	WhyItFailed,
 } from "./types";

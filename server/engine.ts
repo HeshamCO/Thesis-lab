@@ -7,7 +7,6 @@ import type {
 } from "openai/resources/chat/completions";
 import type { Server as SocketServer } from "socket.io";
 import {
-	applyRetrievalDefense,
 	computeAttackTelemetry,
 	defenseAppliesPromptGuard,
 	evaluateRuleStep,
@@ -222,6 +221,12 @@ export class ExperimentEngine {
 			retrievalQuery,
 			run.retrievalSettings.topK,
 		);
+		let rawAttackerRetrievedCount = 0;
+		let rawScenarioRetrievedCount = 0;
+		for (const doc of rawContext) {
+			if (doc.source === "attacker") rawAttackerRetrievedCount += 1;
+			else if (doc.source === "scenario") rawScenarioRetrievedCount += 1;
+		}
 		this.log(run.id, "info", "retrieval.queried", "Retrieved context for attempt.", {
 			attemptNumber,
 			query: retrievalQuery,
@@ -232,13 +237,12 @@ export class ExperimentEngine {
 				title: document.title,
 				source: document.source,
 			})),
-			scenarioCount: rawContext.filter((document) => document.source === "scenario").length,
-			attackerCount: rawContext.filter((document) => document.source === "attacker").length,
+			scenarioCount: rawScenarioRetrievedCount,
+			attackerCount: rawAttackerRetrievedCount,
 		});
 
 		const defenseDiff = this.applyDefenseToContext(run, rawContext);
 		const retrievedContext = defenseDiff.kept;
-		const rawAttackerRetrievedCount = rawContext.filter((doc) => doc.source === "attacker").length;
 		this.log(
 			run.id,
 			"info",
@@ -272,15 +276,15 @@ export class ExperimentEngine {
 		});
 		const benignResponse = benign.text;
 
+		const evaluated = await Promise.all(
+			run.scenarioSnapshot.successSteps.map((step) =>
+				this.evaluateStep(run, step, benignResponse, benign.toolCalls, benign.structured).then(
+					(result) => ({ step, result }),
+				),
+			),
+		);
 		const stepResults: StepResultRecord[] = [];
-		for (const step of run.scenarioSnapshot.successSteps) {
-			const result = await this.evaluateStep(
-				run,
-				step,
-				benignResponse,
-				benign.toolCalls,
-				benign.structured,
-			);
+		for (const { step, result } of evaluated) {
 			if (step.evaluatorType === "llm_judge") {
 				this.log(
 					run.id,
@@ -423,7 +427,6 @@ export class ExperimentEngine {
 				attempt.strategy && attempt.strategy.length > 0
 					? attempt.strategy
 					: extractStrategyFromRaw(attempt.rawAttackerOutput);
-			const telemetry = attempt.attackTelemetry;
 			return {
 				attemptNumber: attempt.attemptNumber,
 				strategy,
@@ -431,13 +434,7 @@ export class ExperimentEngine {
 				benignResponsePreview: attempt.benignResponse,
 				failedRequiredSteps,
 				feedbackGuidance: feedbackParts.join(" "),
-				retrieved: telemetry?.retrieved,
-				citedMaliciousDoc: telemetry?.citedMaliciousDoc,
-				attackEffect: telemetry?.attackEffect,
-				utilityPreserved: telemetry?.utilityPreserved,
-				toolCallAttempted: telemetry?.toolCallAttempted,
-				secretLeakageAttempted: telemetry?.secretLeakageAttempted,
-				whyItFailed: telemetry?.whyItFailed,
+				telemetry: attempt.attackTelemetry ?? undefined,
 			};
 		});
 	}
@@ -468,13 +465,7 @@ export class ExperimentEngine {
 
 		if (exposedTools.length === 0) {
 			const text = await this.callModel(run.benignModelSnapshot, { ...built, role: "benign" });
-			const structured = useStructured ? parseStructuredBenignOutput(text) : null;
-			return {
-				text,
-				toolCalls: [],
-				structured: structured?.value ?? null,
-				structuredParseOk: useStructured ? structured?.parseOk ?? false : null,
-			};
+			return finishBenignResult(text, [], useStructured);
 		}
 
 		const messages = buildMessages(built);
@@ -486,13 +477,7 @@ export class ExperimentEngine {
 			messages.push(message.assistant);
 
 			if (!message.toolCalls.length) {
-				const structured = useStructured ? parseStructuredBenignOutput(message.text) : null;
-				return {
-					text: message.text,
-					toolCalls: recordedCalls,
-					structured: structured?.value ?? null,
-					structuredParseOk: useStructured ? structured?.parseOk ?? false : null,
-				};
+				return finishBenignResult(message.text, recordedCalls, useStructured);
 			}
 
 			for (const call of message.toolCalls) {
@@ -582,13 +567,7 @@ export class ExperimentEngine {
 			| undefined;
 		const fallbackText =
 			typeof lastAssistant?.content === "string" ? lastAssistant.content : "";
-		const structured = useStructured ? parseStructuredBenignOutput(fallbackText) : null;
-		return {
-			text: fallbackText,
-			toolCalls: recordedCalls,
-			structured: structured?.value ?? null,
-			structuredParseOk: useStructured ? structured?.parseOk ?? false : null,
-		};
+		return finishBenignResult(fallbackText, recordedCalls, useStructured);
 	}
 
 	private async callBenignWithTools(
@@ -728,18 +707,6 @@ export class ExperimentEngine {
 			} else {
 				kept.push(document);
 			}
-		}
-
-		// Defensive parity check: applyRetrievalDefense should agree on the kept set.
-		const parityKept = applyRetrievalDefense(context, run.defenseSnapshot.blockedPatterns);
-		if (parityKept.length !== kept.length) {
-			this.log(
-				run.id,
-				"warn",
-				"defense.parity_mismatch",
-				"Defense parity mismatch between engine and shared evaluator helper.",
-				{ engineKept: kept.length, helperKept: parityKept.length },
-			);
 		}
 
 		return { kept, dropped };
@@ -919,9 +886,9 @@ function parseAttackerOutput(
 					? parsed.rationale
 					: "Model did not provide rationale.",
 			strategy: typeof parsed.strategy === "string" ? parsed.strategy : "",
-			intendedEffect: coerceLabel(parsed.intendedEffect, INTENDED_EFFECTS),
-			expectedTrigger: coerceLabel(parsed.expectedTrigger, EXPECTED_TRIGGERS),
-			stealthLevel: coerceLabel(parsed.stealthLevel, STEALTH_LEVELS),
+			intendedEffect: coerceLabel(parsed.intendedEffect, INTENDED_EFFECTS, "unspecified"),
+			expectedTrigger: coerceLabel(parsed.expectedTrigger, EXPECTED_TRIGGERS, "unspecified"),
+			stealthLevel: coerceLabel(parsed.stealthLevel, STEALTH_LEVELS, "unspecified"),
 			preserveUtility:
 				typeof parsed.preserveUtility === "boolean" ? parsed.preserveUtility : null,
 			retrievalHooks,
@@ -946,13 +913,13 @@ function parseAttackerOutput(
 	}
 }
 
-function coerceLabel<T extends string>(value: unknown, allowed: readonly T[]): T {
+function coerceLabel<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
 	if (typeof value !== "string") {
-		return allowed[allowed.length - 1];
+		return fallback;
 	}
 	const normalized = value.trim().toLowerCase();
 	const match = allowed.find((label) => label === normalized);
-	return match ?? allowed[allowed.length - 1];
+	return match ?? fallback;
 }
 
 function parseStructuredBenignOutput(
@@ -979,6 +946,23 @@ function parseStructuredBenignOutput(
 	} catch {
 		return { value: null, parseOk: false };
 	}
+}
+
+function finishBenignResult(
+	text: string,
+	toolCalls: ToolCallRecord[],
+	useStructured: boolean,
+): BenignTaskResult {
+	if (!useStructured) {
+		return { text, toolCalls, structured: null, structuredParseOk: null };
+	}
+	const parsed = parseStructuredBenignOutput(text);
+	return {
+		text,
+		toolCalls,
+		structured: parsed.value,
+		structuredParseOk: parsed.parseOk,
+	};
 }
 
 function parseJudgeOutput(content: string): JudgeOutput {

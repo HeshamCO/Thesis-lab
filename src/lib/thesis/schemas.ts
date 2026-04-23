@@ -50,6 +50,16 @@ export type ExpectedTriggerLabel = (typeof EXPECTED_TRIGGERS)[number];
 export const STEALTH_LEVELS = ["low", "medium", "high", "unspecified"] as const;
 export type StealthLevelLabel = (typeof STEALTH_LEVELS)[number];
 
+export type AttackTelemetry = {
+	retrieved: boolean;
+	citedMaliciousDoc: boolean;
+	attackEffect: AttackEffectLabel;
+	utilityPreserved: boolean;
+	toolCallAttempted: boolean;
+	secretLeakageAttempted: boolean;
+	whyItFailed: WhyItFailedLabel;
+};
+
 export const runStatusSchema = z.enum(["queued", "running", "pausing", "paused", "completed", "failed"]);
 
 export const ACTIVE_RUN_STATUSES: ReadonlyArray<z.infer<typeof runStatusSchema>> = [
@@ -254,15 +264,7 @@ export type AttemptRecord = {
 	stealthLevel: StealthLevelLabel;
 	preserveUtility: boolean | null;
 	retrievalHooks: string[];
-	attackTelemetry: {
-		retrieved: boolean;
-		citedMaliciousDoc: boolean;
-		attackEffect: AttackEffectLabel;
-		utilityPreserved: boolean;
-		toolCallAttempted: boolean;
-		secretLeakageAttempted: boolean;
-		whyItFailed: WhyItFailedLabel;
-	} | null;
+	attackTelemetry: AttackTelemetry | null;
 	benignTaskAnswer: string | null;
 	benignUsedDocs: number[] | null;
 	benignSuspiciousInstructionDetected: boolean | null;

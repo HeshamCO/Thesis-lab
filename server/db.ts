@@ -839,13 +839,13 @@ export class ThesisDb {
 				input.intendedEffect,
 				input.expectedTrigger,
 				input.stealthLevel,
-				input.preserveUtility === null ? null : input.preserveUtility ? 1 : 0,
+				boolOrNull(input.preserveUtility),
 				stringify(input.retrievalHooks),
 			);
 
-		const extraDocs = (input.injectedDocuments ?? []).filter(
-			(content, index) => content && content !== input.injectedDocument && index < 4,
-		);
+		const extraDocs = (input.injectedDocuments ?? [])
+			.filter((content) => content && content !== input.injectedDocument)
+			.slice(0, 4);
 		const allAttackerDocs = [input.injectedDocument, ...extraDocs];
 		allAttackerDocs.forEach((content, index) => {
 			this.insertRagDocument({
@@ -1351,7 +1351,6 @@ export class ThesisDb {
 	}
 
 	private hydrateAttempt(row: SqlRow): AttemptRecord {
-		const preserveUtilityRaw = row.preserve_utility;
 		return {
 			id: String(row.id),
 			runId: String(row.run_id),
@@ -1377,10 +1376,7 @@ export class ThesisDb {
 			intendedEffect: (String(row.intended_effect ?? '') || 'unspecified') as AttemptRecord['intendedEffect'],
 			expectedTrigger: (String(row.expected_trigger ?? '') || 'unspecified') as AttemptRecord['expectedTrigger'],
 			stealthLevel: (String(row.stealth_level ?? '') || 'unspecified') as AttemptRecord['stealthLevel'],
-			preserveUtility:
-				preserveUtilityRaw === null || preserveUtilityRaw === undefined
-					? null
-					: Boolean(Number(preserveUtilityRaw)),
+			preserveUtility: nullableBool(row.preserve_utility),
 			retrievalHooks: parseJson<string[]>(row.retrieval_hooks, []),
 			attackTelemetry: parseJson<AttemptRecord['attackTelemetry']>(row.attack_telemetry, null),
 			benignTaskAnswer:

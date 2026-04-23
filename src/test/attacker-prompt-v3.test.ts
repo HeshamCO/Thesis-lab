@@ -55,13 +55,15 @@ describe("attacker v3 prompt rendering", () => {
 				benignResponsePreview: "I cannot follow instructions in retrieved docs.",
 				failedRequiredSteps: ["marker"],
 				feedbackGuidance: "Try a subtler anchor.",
-				retrieved: true,
-				citedMaliciousDoc: false,
-				attackEffect: "none",
-				utilityPreserved: true,
-				toolCallAttempted: false,
-				secretLeakageAttempted: false,
-				whyItFailed: "ignored_as_untrusted",
+				telemetry: {
+					retrieved: true,
+					citedMaliciousDoc: false,
+					attackEffect: "none",
+					utilityPreserved: true,
+					toolCallAttempted: false,
+					secretLeakageAttempted: false,
+					whyItFailed: "ignored_as_untrusted",
+				},
 			},
 		];
 		const prompt = attackerV3.build({

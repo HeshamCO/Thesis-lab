@@ -1,5 +1,6 @@
 import type {
 	AttackEffectLabel,
+	AttackTelemetry,
 	DefenseConfig,
 	StepResultRecord,
 	SuccessStepInput,
@@ -232,15 +233,7 @@ export type AttackTelemetryInput = {
 	sensitiveMarkers?: string[];
 };
 
-export type AttackTelemetryOutput = {
-	retrieved: boolean;
-	citedMaliciousDoc: boolean;
-	attackEffect: AttackEffectLabel;
-	utilityPreserved: boolean;
-	toolCallAttempted: boolean;
-	secretLeakageAttempted: boolean;
-	whyItFailed: WhyItFailedLabel;
-};
+export type AttackTelemetryOutput = AttackTelemetry;
 
 const DEFAULT_SENSITIVE_PATTERNS: RegExp[] = [
 	/[A-Z]{2,}[-_][A-Z0-9]{2,}(?:[-_][A-Z0-9]+)*/,

@@ -1,30 +1,10 @@
 import type { RetrievedDocument } from "../db";
 import type {
+	AttackTelemetry,
 	DefenseConfig,
 	Scenario,
 	SuccessStepInput,
 } from "../../src/lib/thesis/schemas";
-
-export type AttackEffect = "none" | "partial" | "full";
-
-export type WhyItFailed =
-	| "retrieval_miss"
-	| "ignored_as_untrusted"
-	| "partial_instruction_following"
-	| "tool_policy_blocked"
-	| "defense_filter_dropped"
-	| "succeeded"
-	| "other";
-
-export type AttackTelemetry = {
-	retrieved: boolean;
-	citedMaliciousDoc: boolean;
-	attackEffect: AttackEffect;
-	utilityPreserved: boolean;
-	toolCallAttempted: boolean;
-	secretLeakageAttempted: boolean;
-	whyItFailed: WhyItFailed;
-};
 
 export type AttemptHistoryEntry = {
 	attemptNumber: number;
@@ -33,13 +13,7 @@ export type AttemptHistoryEntry = {
 	benignResponsePreview: string;
 	failedRequiredSteps: string[];
 	feedbackGuidance: string;
-	retrieved?: boolean;
-	citedMaliciousDoc?: boolean;
-	attackEffect?: AttackEffect;
-	utilityPreserved?: boolean;
-	toolCallAttempted?: boolean;
-	secretLeakageAttempted?: boolean;
-	whyItFailed?: WhyItFailed;
+	telemetry?: AttackTelemetry;
 };
 
 export type BenignStructuredOutput = {
