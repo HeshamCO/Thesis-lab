@@ -289,7 +289,16 @@ export type StepResultRecord = {
 	createdAt: string;
 };
 
-export const ATTACKER_ARTIFACT_KINDS = ["injection_prompt", "injected_document", "rationale", "raw_output"] as const;
+export const ATTACKER_ARTIFACT_KINDS = [
+	"injection_prompt",
+	"injected_document",
+	"rationale",
+	"raw_output",
+	"attacker_system_prompt",
+	"attacker_user_prompt",
+	"benign_system_prompt",
+	"benign_user_prompt",
+] as const;
 
 export type AttackerArtifactKind = (typeof ATTACKER_ARTIFACT_KINDS)[number];
 

@@ -51,6 +51,8 @@ type BenignTaskResult = {
 	toolCalls: ToolCallRecord[];
 	structured: BenignStructuredOutput | null;
 	structuredParseOk: boolean | null;
+	systemPrompt: string;
+	userPrompt: string;
 };
 
 type AttackerOutput = {
@@ -66,6 +68,8 @@ type AttackerOutput = {
 	retrievalHooks: string[];
 	rawOutput: string;
 	parseOk: boolean;
+	systemPrompt: string;
+	userPrompt: string;
 };
 
 type JudgeOutput = {
@@ -213,6 +217,8 @@ export class ExperimentEngine {
 			preserveUtility: attackerOutput.preserveUtility,
 			retrievalHooks: attackerOutput.retrievalHooks,
 		});
+		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "attacker_system_prompt", attackerOutput.systemPrompt);
+		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "attacker_user_prompt", attackerOutput.userPrompt);
 		this.emit("attempt:update", run.id, attempt);
 
 		const retrievalQuery = run.retrievalSettings.query || run.scenarioSnapshot.retrievalQuery;
@@ -267,6 +273,8 @@ export class ExperimentEngine {
 		const benignStartedAt = Date.now();
 		const benign = await this.runBenignTask(run, attempt.id, attemptNumber, retrievedContext);
 		const benignDurationMs = Date.now() - benignStartedAt;
+		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "benign_system_prompt", benign.systemPrompt);
+		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "benign_user_prompt", benign.userPrompt);
 		this.log(run.id, "info", "benign.responded", "Benign model produced a response.", {
 			attemptNumber,
 			durationMs: benignDurationMs,
@@ -392,7 +400,12 @@ export class ExperimentEngine {
 			retrievalQuery,
 		});
 		const content = await this.callModel(run.attackerModelSnapshot, { ...built, role: "attacker" });
-		return parseAttackerOutput(content, run, attemptNumber);
+		const parsed = parseAttackerOutput(content, run, attemptNumber);
+		return {
+			...parsed,
+			systemPrompt: built.system ?? "",
+			userPrompt: built.user,
+		};
 	}
 
 	private buildAttackerHistory(run: RunDetail): AttemptHistoryEntry[] {
@@ -463,9 +476,10 @@ export class ExperimentEngine {
 			structuredBenignOutput: useStructured,
 		});
 
+		const prompts = { systemPrompt: built.system ?? "", userPrompt: built.user };
 		if (exposedTools.length === 0) {
 			const text = await this.callModel(run.benignModelSnapshot, { ...built, role: "benign" });
-			return finishBenignResult(text, [], useStructured);
+			return finishBenignResult(text, [], useStructured, prompts);
 		}
 
 		const messages = buildMessages(built);
@@ -477,7 +491,7 @@ export class ExperimentEngine {
 			messages.push(message.assistant);
 
 			if (!message.toolCalls.length) {
-				return finishBenignResult(message.text, recordedCalls, useStructured);
+				return finishBenignResult(message.text, recordedCalls, useStructured, prompts);
 			}
 
 			for (const call of message.toolCalls) {
@@ -567,7 +581,7 @@ export class ExperimentEngine {
 			| undefined;
 		const fallbackText =
 			typeof lastAssistant?.content === "string" ? lastAssistant.content : "";
-		return finishBenignResult(fallbackText, recordedCalls, useStructured);
+		return finishBenignResult(fallbackText, recordedCalls, useStructured, prompts);
 	}
 
 	private async callBenignWithTools(
@@ -771,6 +785,33 @@ export class ExperimentEngine {
 		return "Mock benign response generated because the configured API key environment variable is missing. The retrieved content was treated as untrusted data.";
 	}
 
+	private recordPromptArtifact(
+		runId: string,
+		attemptId: string,
+		attemptNumber: number,
+		kind:
+			| "attacker_system_prompt"
+			| "attacker_user_prompt"
+			| "benign_system_prompt"
+			| "benign_user_prompt",
+		content: string,
+	) {
+		if (!content) return;
+		const labels: Record<typeof kind, string> = {
+			attacker_system_prompt: "attacker system prompt",
+			attacker_user_prompt: "attacker user prompt",
+			benign_system_prompt: "benign system prompt",
+			benign_user_prompt: "benign user prompt",
+		};
+		this.db.createAttackerArtifact({
+			runId,
+			attemptId,
+			kind,
+			title: `Attempt ${attemptNumber} ${labels[kind]}`,
+			content,
+		});
+	}
+
 	private buildFeedback(stepResults: StepResultRecord[]) {
 		const failed = stepResults.filter((result) => !result.passed);
 		if (failed.length === 0) {
@@ -894,6 +935,8 @@ function parseAttackerOutput(
 			retrievalHooks,
 			rawOutput: content,
 			parseOk: true,
+			systemPrompt: "",
+			userPrompt: "",
 		};
 	} catch {
 		return {
@@ -909,6 +952,8 @@ function parseAttackerOutput(
 			retrievalHooks: [],
 			rawOutput: content,
 			parseOk: false,
+			systemPrompt: "",
+			userPrompt: "",
 		};
 	}
 }
@@ -952,9 +997,17 @@ function finishBenignResult(
 	text: string,
 	toolCalls: ToolCallRecord[],
 	useStructured: boolean,
+	prompts: { systemPrompt: string; userPrompt: string },
 ): BenignTaskResult {
 	if (!useStructured) {
-		return { text, toolCalls, structured: null, structuredParseOk: null };
+		return {
+			text,
+			toolCalls,
+			structured: null,
+			structuredParseOk: null,
+			systemPrompt: prompts.systemPrompt,
+			userPrompt: prompts.userPrompt,
+		};
 	}
 	const parsed = parseStructuredBenignOutput(text);
 	return {
@@ -962,6 +1015,8 @@ function finishBenignResult(
 		toolCalls,
 		structured: parsed.value,
 		structuredParseOk: parsed.parseOk,
+		systemPrompt: prompts.systemPrompt,
+		userPrompt: prompts.userPrompt,
 	};
 }
 

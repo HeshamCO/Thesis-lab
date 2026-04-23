@@ -248,13 +248,21 @@ const ARTIFACT_KIND_LABEL: Record<AttackerArtifact["kind"], string> = {
 	injection_prompt: "Injection prompt",
 	injected_document: "Injected document",
 	raw_output: "Raw attacker output",
+	attacker_system_prompt: "Attacker system prompt",
+	attacker_user_prompt: "Attacker user prompt",
+	benign_system_prompt: "Benign system prompt",
+	benign_user_prompt: "Benign user prompt",
 };
 
 const ARTIFACT_KIND_ORDER: Record<AttackerArtifact["kind"], number> = {
-	rationale: 0,
-	injection_prompt: 1,
-	injected_document: 2,
-	raw_output: 3,
+	attacker_system_prompt: 0,
+	attacker_user_prompt: 1,
+	rationale: 2,
+	injection_prompt: 3,
+	injected_document: 4,
+	raw_output: 5,
+	benign_system_prompt: 6,
+	benign_user_prompt: 7,
 };
 
 export function artifactKindOrder(kind: AttackerArtifact["kind"]) {
