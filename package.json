@@ -20,6 +20,7 @@
     "seed:ollama": "bun run server/seed-ollama.ts",
     "seed:openrouter": "bun run server/seed-openrouter.ts",
     "seed:scenarios": "bun run server/seed-scenarios.ts",
+    "db:reset": "bun run server/reset-db.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio"

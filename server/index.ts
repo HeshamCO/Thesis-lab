@@ -167,6 +167,7 @@ app.post("/api/runs", (request, response) => {
 		judgePromptVersion: input.judgePromptVersion,
 		benignTaskHasSafetyClause: input.benignTaskHasSafetyClause,
 		labelRetrievedDocuments: input.labelRetrievedDocuments,
+		structuredBenignOutput: input.structuredBenignOutput,
 	});
 	engine.start(run.id);
 	response.status(201).json(run);

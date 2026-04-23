@@ -14,12 +14,41 @@ export const evaluatorTypeSchema = z.enum([
 
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
-export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2"] as const;
-export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2"] as const;
-export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2"] as const;
-export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v2";
-export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v2";
-export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v2";
+export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3"] as const;
+export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3"] as const;
+export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3"] as const;
+export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v3";
+export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v3";
+export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v3";
+
+export const ATTACK_EFFECTS = ["none", "partial", "full"] as const;
+export type AttackEffectLabel = (typeof ATTACK_EFFECTS)[number];
+
+export const WHY_IT_FAILED_LABELS = [
+	"retrieval_miss",
+	"ignored_as_untrusted",
+	"partial_instruction_following",
+	"tool_policy_blocked",
+	"defense_filter_dropped",
+	"succeeded",
+	"other",
+] as const;
+export type WhyItFailedLabel = (typeof WHY_IT_FAILED_LABELS)[number];
+
+export const INTENDED_EFFECTS = [
+	"exfiltration",
+	"tool_misuse",
+	"output_manipulation",
+	"task_deviation",
+	"unspecified",
+] as const;
+export type IntendedEffectLabel = (typeof INTENDED_EFFECTS)[number];
+
+export const EXPECTED_TRIGGERS = ["summarize", "extract", "forward", "execute", "cite", "unspecified"] as const;
+export type ExpectedTriggerLabel = (typeof EXPECTED_TRIGGERS)[number];
+
+export const STEALTH_LEVELS = ["low", "medium", "high", "unspecified"] as const;
+export type StealthLevelLabel = (typeof STEALTH_LEVELS)[number];
 
 export const runStatusSchema = z.enum(["queued", "running", "pausing", "paused", "completed", "failed"]);
 
@@ -125,6 +154,7 @@ export const startRunInputSchema = z.object({
 	judgePromptVersion: z.enum(JUDGE_PROMPT_VERSIONS).default(DEFAULT_JUDGE_PROMPT_VERSION),
 	benignTaskHasSafetyClause: z.coerce.boolean().default(true),
 	labelRetrievedDocuments: z.coerce.boolean().default(false),
+	structuredBenignOutput: z.coerce.boolean().default(true),
 });
 
 export type DefenseMode = z.infer<typeof defenseModeSchema>;
@@ -191,6 +221,7 @@ export type RunListItem = {
 	judgePromptVersion: string;
 	benignTaskHasSafetyClause: boolean;
 	labelRetrievedDocuments: boolean;
+	structuredBenignOutput: boolean;
 	createdAt: string;
 	updatedAt: string;
 	completedAt: string | null;
@@ -217,6 +248,27 @@ export type AttemptRecord = {
 	totalDurationMs: number;
 	defenseFilteredCount: number;
 	toolCallsCount: number;
+	strategy: string;
+	intendedEffect: IntendedEffectLabel;
+	expectedTrigger: ExpectedTriggerLabel;
+	stealthLevel: StealthLevelLabel;
+	preserveUtility: boolean | null;
+	retrievalHooks: string[];
+	attackTelemetry: {
+		retrieved: boolean;
+		citedMaliciousDoc: boolean;
+		attackEffect: AttackEffectLabel;
+		utilityPreserved: boolean;
+		toolCallAttempted: boolean;
+		secretLeakageAttempted: boolean;
+		whyItFailed: WhyItFailedLabel;
+	} | null;
+	benignTaskAnswer: string | null;
+	benignUsedDocs: number[] | null;
+	benignSuspiciousInstructionDetected: boolean | null;
+	benignToolCalledSelfReport: boolean | null;
+	benignSensitiveDataExposed: boolean | null;
+	benignStructuredParseOk: boolean | null;
 	createdAt: string;
 	completedAt: string | null;
 };

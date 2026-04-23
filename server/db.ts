@@ -14,6 +14,8 @@ import type {
 	AttemptStatus,
 	DefenseConfig,
 	DefenseConfigInput,
+	ExpectedTriggerLabel,
+	IntendedEffectLabel,
 	ModelConfig,
 	ModelConfigInput,
 	RetrievalSettings,
@@ -23,6 +25,7 @@ import type {
 	RunStatus,
 	Scenario,
 	ScenarioInput,
+	StealthLevelLabel,
 	StepResultRecord,
 	SuccessStepInput,
 	ToolCallRecord,
@@ -33,7 +36,7 @@ import type {
 
 type SqlRow = Record<string, unknown>;
 
-const DB_PATH = resolve(process.cwd(), 'data/thesis-lab.sqlite');
+export const DEFAULT_DB_PATH = resolve(process.cwd(), 'data/thesis-lab.sqlite');
 
 function now() {
 	return new Date().toISOString();
@@ -63,6 +66,16 @@ function bool(value: unknown) {
 	return Boolean(Number(value));
 }
 
+function boolOrNull(value: boolean | null | undefined): number | null {
+	if (value === null || value === undefined) return null;
+	return value ? 1 : 0;
+}
+
+function nullableBool(value: unknown): boolean | null {
+	if (value === null || value === undefined) return null;
+	return Boolean(Number(value));
+}
+
 export type RetrievedDocument = {
 	title: string;
 	content: string;
@@ -74,10 +87,17 @@ export type CreateAttemptInput = {
 	attemptNumber: number;
 	injectionPrompt: string;
 	injectedDocument: string;
+	injectedDocuments?: string[];
 	rationale: string;
 	rawAttackerOutput: string;
 	rawAttackerParseOk: boolean;
 	attackDurationMs: number;
+	strategy: string;
+	intendedEffect: IntendedEffectLabel;
+	expectedTrigger: ExpectedTriggerLabel;
+	stealthLevel: StealthLevelLabel;
+	preserveUtility: boolean | null;
+	retrievalHooks: string[];
 };
 
 export type CompleteAttemptInput = {
@@ -92,6 +112,15 @@ export type CompleteAttemptInput = {
 	benignDurationMs: number;
 	totalDurationMs: number;
 	defenseFilteredCount: number;
+	attackTelemetry: AttemptRecord['attackTelemetry'];
+	benignStructured: {
+		taskAnswer: string | null;
+		usedDocs: number[] | null;
+		suspiciousInstructionDetected: boolean | null;
+		toolCalledSelfReport: boolean | null;
+		sensitiveDataExposed: boolean | null;
+		parseOk: boolean | null;
+	};
 };
 
 export type CreateStepResultInput = {
@@ -118,7 +147,7 @@ export type CreateAttackerArtifactInput = {
 export class ThesisDb {
 	private db: Database;
 
-	constructor(dbPath = DB_PATH) {
+	constructor(dbPath = DEFAULT_DB_PATH) {
 		mkdirSync(dirname(dbPath), { recursive: true });
 		this.db = new Database(dbPath);
 		this.db.run('PRAGMA journal_mode = WAL');
@@ -334,8 +363,24 @@ export class ThesisDb {
 		this.addColumnIfMissing('runs', 'judge_prompt_version', "TEXT NOT NULL DEFAULT 'judge@v1'");
 		this.addColumnIfMissing('runs', 'benign_task_has_safety_clause', 'INTEGER NOT NULL DEFAULT 1');
 		this.addColumnIfMissing('runs', 'label_retrieved_documents', 'INTEGER NOT NULL DEFAULT 1');
+		this.addColumnIfMissing('runs', 'structured_benign_output', 'INTEGER NOT NULL DEFAULT 0');
 		this.addColumnIfMissing('runs', 'judge_model_id', "TEXT NOT NULL DEFAULT ''");
 		this.addColumnIfMissing('runs', 'judge_model_snapshot', "TEXT NOT NULL DEFAULT ''");
+
+		// v3 attempt-level telemetry and attacker/benign metadata (all nullable TEXT/INTEGER).
+		this.addColumnIfMissing('attempts', 'strategy', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'intended_effect', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'expected_trigger', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'stealth_level', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'preserve_utility', 'INTEGER');
+		this.addColumnIfMissing('attempts', 'retrieval_hooks', "TEXT NOT NULL DEFAULT '[]'");
+		this.addColumnIfMissing('attempts', 'attack_telemetry', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'benign_task_answer', 'TEXT');
+		this.addColumnIfMissing('attempts', 'benign_used_docs', 'TEXT');
+		this.addColumnIfMissing('attempts', 'benign_suspicious_instruction_detected', 'INTEGER');
+		this.addColumnIfMissing('attempts', 'benign_tool_called_self_report', 'INTEGER');
+		this.addColumnIfMissing('attempts', 'benign_sensitive_data_exposed', 'INTEGER');
+		this.addColumnIfMissing('attempts', 'benign_structured_parse_ok', 'INTEGER');
 	}
 
 	private addColumnIfMissing(table: string, column: string, definition: string) {
@@ -631,6 +676,7 @@ export class ThesisDb {
 		judgePromptVersion?: string;
 		benignTaskHasSafetyClause?: boolean;
 		labelRetrievedDocuments?: boolean;
+		structuredBenignOutput?: boolean;
 	}): RunDetail {
 		const active = this.db.prepare("SELECT id FROM runs WHERE status IN ('queued', 'running', 'pausing')").get();
 		if (active) {
@@ -644,6 +690,7 @@ export class ThesisDb {
 		const judgePromptVersion = input.judgePromptVersion ?? DEFAULT_JUDGE_PROMPT_ID;
 		const benignTaskHasSafetyClause = input.benignTaskHasSafetyClause ?? true;
 		const labelRetrievedDocuments = input.labelRetrievedDocuments ?? false;
+		const structuredBenignOutput = input.structuredBenignOutput ?? true;
 		const judgeModelId = input.judgeModel?.id ?? '';
 		const judgeModelSnapshot = input.judgeModel ? stringify(input.judgeModel) : '';
 		this.db
@@ -653,9 +700,9 @@ export class ThesisDb {
 				scenario_snapshot, defense_snapshot, attacker_model_snapshot, benign_model_snapshot,
 				max_attempts, retrieval_settings, summary, error, created_at, updated_at, completed_at,
 				attacker_prompt_version, benign_prompt_version, judge_prompt_version,
-				benign_task_has_safety_clause, label_retrieved_documents,
+				benign_task_has_safety_clause, label_retrieved_documents, structured_benign_output,
 				judge_model_id, judge_model_snapshot)
-				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				runId,
@@ -676,6 +723,7 @@ export class ThesisDb {
 				judgePromptVersion,
 				benignTaskHasSafetyClause ? 1 : 0,
 				labelRetrievedDocuments ? 1 : 0,
+				structuredBenignOutput ? 1 : 0,
 				judgeModelId,
 				judgeModelSnapshot,
 			);
@@ -770,8 +818,11 @@ export class ThesisDb {
 				rationale, retrieved_context, benign_response, feedback, success,
 				utility_score, error, raw_attacker_output, raw_attacker_parse_ok,
 				attack_duration_ms, benign_duration_ms, total_duration_ms,
-				defense_filtered_count, created_at, completed_at)
-				VALUES (?, ?, ?, 'running', ?, ?, ?, '[]', '', '', 0, 0, '', ?, ?, ?, 0, 0, 0, ?, NULL)`,
+				defense_filtered_count, created_at, completed_at,
+				strategy, intended_effect, expected_trigger, stealth_level,
+				preserve_utility, retrieval_hooks)
+				VALUES (?, ?, ?, 'running', ?, ?, ?, '[]', '', '', 0, 0, '', ?, ?, ?, 0, 0, 0, ?, NULL,
+					?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				attemptId,
@@ -784,13 +835,29 @@ export class ThesisDb {
 				input.rawAttackerParseOk ? 1 : 0,
 				input.attackDurationMs,
 				timestamp,
+				input.strategy,
+				input.intendedEffect,
+				input.expectedTrigger,
+				input.stealthLevel,
+				input.preserveUtility === null ? null : input.preserveUtility ? 1 : 0,
+				stringify(input.retrievalHooks),
 			);
-		this.insertRagDocument({
-			runId: input.runId,
-			attemptId,
-			source: 'attacker',
-			title: `Attempt ${input.attemptNumber} injection`,
-			content: input.injectedDocument,
+
+		const extraDocs = (input.injectedDocuments ?? []).filter(
+			(content, index) => content && content !== input.injectedDocument && index < 4,
+		);
+		const allAttackerDocs = [input.injectedDocument, ...extraDocs];
+		allAttackerDocs.forEach((content, index) => {
+			this.insertRagDocument({
+				runId: input.runId,
+				attemptId,
+				source: 'attacker',
+				title:
+					index === 0
+						? `Attempt ${input.attemptNumber} injection`
+						: `Attempt ${input.attemptNumber} injection (aux ${index})`,
+				content,
+			});
 		});
 		this.recordAttackerArtifacts(input.runId, attemptId, input.attemptNumber, {
 			injectionPrompt: input.injectionPrompt,
@@ -803,11 +870,16 @@ export class ThesisDb {
 	}
 
 	completeAttempt(input: CompleteAttemptInput): AttemptRecord {
+		const structured = input.benignStructured;
 		this.db
 			.prepare(
 				`UPDATE attempts SET status = ?, retrieved_context = ?, benign_response = ?,
 				feedback = ?, success = ?, utility_score = ?, error = ?,
 				benign_duration_ms = ?, total_duration_ms = ?, defense_filtered_count = ?,
+				attack_telemetry = ?,
+				benign_task_answer = ?, benign_used_docs = ?,
+				benign_suspicious_instruction_detected = ?, benign_tool_called_self_report = ?,
+				benign_sensitive_data_exposed = ?, benign_structured_parse_ok = ?,
 				completed_at = ?
 				WHERE id = ?`,
 			)
@@ -822,6 +894,13 @@ export class ThesisDb {
 				input.benignDurationMs,
 				input.totalDurationMs,
 				input.defenseFilteredCount,
+				input.attackTelemetry ? stringify(input.attackTelemetry) : '',
+				structured.taskAnswer,
+				structured.usedDocs === null ? null : stringify(structured.usedDocs),
+				boolOrNull(structured.suspiciousInstructionDetected),
+				boolOrNull(structured.toolCalledSelfReport),
+				boolOrNull(structured.sensitiveDataExposed),
+				boolOrNull(structured.parseOk),
 				now(),
 				input.attemptId,
 			);
@@ -1264,6 +1343,7 @@ export class ThesisDb {
 			judgePromptVersion: String(row.judge_prompt_version ?? DEFAULT_JUDGE_PROMPT_ID),
 			benignTaskHasSafetyClause: bool(row.benign_task_has_safety_clause ?? 1),
 			labelRetrievedDocuments: bool(row.label_retrieved_documents ?? 0),
+			structuredBenignOutput: bool(row.structured_benign_output ?? 0),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 			completedAt: row.completed_at ? String(row.completed_at) : null,
@@ -1271,6 +1351,7 @@ export class ThesisDb {
 	}
 
 	private hydrateAttempt(row: SqlRow): AttemptRecord {
+		const preserveUtilityRaw = row.preserve_utility;
 		return {
 			id: String(row.id),
 			runId: String(row.run_id),
@@ -1292,6 +1373,28 @@ export class ThesisDb {
 			totalDurationMs: Number(row.total_duration_ms ?? 0),
 			defenseFilteredCount: Number(row.defense_filtered_count ?? 0),
 			toolCallsCount: Number(row.tool_calls_count ?? 0),
+			strategy: String(row.strategy ?? ''),
+			intendedEffect: (String(row.intended_effect ?? '') || 'unspecified') as AttemptRecord['intendedEffect'],
+			expectedTrigger: (String(row.expected_trigger ?? '') || 'unspecified') as AttemptRecord['expectedTrigger'],
+			stealthLevel: (String(row.stealth_level ?? '') || 'unspecified') as AttemptRecord['stealthLevel'],
+			preserveUtility:
+				preserveUtilityRaw === null || preserveUtilityRaw === undefined
+					? null
+					: Boolean(Number(preserveUtilityRaw)),
+			retrievalHooks: parseJson<string[]>(row.retrieval_hooks, []),
+			attackTelemetry: parseJson<AttemptRecord['attackTelemetry']>(row.attack_telemetry, null),
+			benignTaskAnswer:
+				row.benign_task_answer === null || row.benign_task_answer === undefined
+					? null
+					: String(row.benign_task_answer),
+			benignUsedDocs:
+				row.benign_used_docs === null || row.benign_used_docs === undefined
+					? null
+					: parseJson<number[]>(row.benign_used_docs, []),
+			benignSuspiciousInstructionDetected: nullableBool(row.benign_suspicious_instruction_detected),
+			benignToolCalledSelfReport: nullableBool(row.benign_tool_called_self_report),
+			benignSensitiveDataExposed: nullableBool(row.benign_sensitive_data_exposed),
+			benignStructuredParseOk: nullableBool(row.benign_structured_parse_ok),
 			createdAt: String(row.created_at),
 			completedAt: row.completed_at ? String(row.completed_at) : null,
 		};

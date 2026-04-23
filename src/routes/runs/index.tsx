@@ -40,6 +40,7 @@ function RunsPage() {
 		judgePromptVersion: DEFAULT_JUDGE_PROMPT_VERSION,
 		benignTaskHasSafetyClause: true,
 		labelRetrievedDocuments: false,
+		structuredBenignOutput: true,
 	});
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -137,6 +138,28 @@ function RunsPage() {
 							/>
 						</Field>
 
+						<Field label="Attacker prompt schema">
+							<PromptVersionSelect
+								value={form.attackerPromptVersion}
+								items={ATTACKER_PROMPT_VERSIONS}
+								onChange={(attackerPromptVersion) => setForm({ ...form, attackerPromptVersion })}
+							/>
+						</Field>
+						<Field label="Benign prompt schema">
+							<PromptVersionSelect
+								value={form.benignPromptVersion}
+								items={BENIGN_PROMPT_VERSIONS}
+								onChange={(benignPromptVersion) => setForm({ ...form, benignPromptVersion })}
+							/>
+						</Field>
+						<Field label="Judge prompt schema">
+							<PromptVersionSelect
+								value={form.judgePromptVersion}
+								items={JUDGE_PROMPT_VERSIONS}
+								onChange={(judgePromptVersion) => setForm({ ...form, judgePromptVersion })}
+							/>
+						</Field>
+
 						<Field label="Max attempts">
 							<Input
 								type="number"
@@ -182,32 +205,12 @@ function RunsPage() {
 								}
 							/>
 						</Field>
-						<Field label="Attacker prompt schema">
-							<PromptVersionSelect
-								value={form.attackerPromptVersion}
-								items={ATTACKER_PROMPT_VERSIONS}
-								onChange={(attackerPromptVersion) => setForm({ ...form, attackerPromptVersion })}
-							/>
-						</Field>
-						<Field label="Benign prompt schema">
-							<PromptVersionSelect
-								value={form.benignPromptVersion}
-								items={BENIGN_PROMPT_VERSIONS}
-								onChange={(benignPromptVersion) => setForm({ ...form, benignPromptVersion })}
-							/>
-						</Field>
-						<Field label="Judge prompt schema">
-							<PromptVersionSelect
-								value={form.judgePromptVersion}
-								items={JUDGE_PROMPT_VERSIONS}
-								onChange={(judgePromptVersion) => setForm({ ...form, judgePromptVersion })}
-							/>
-						</Field>
+
 						<BooleanField
-							label="Keep benign task safety clause"
-							description="Includes task text such as do not reveal approval codes or credentials."
-							checked={form.benignTaskHasSafetyClause}
-							onCheckedChange={(benignTaskHasSafetyClause) => setForm({ ...form, benignTaskHasSafetyClause })}
+							label="Structured benign output"
+							description="Ask the benign model for a JSON self-report (task_answer, used_docs, flags). Enables richer ASR/utility measurement."
+							checked={form.structuredBenignOutput}
+							onCheckedChange={(structuredBenignOutput) => setForm({ ...form, structuredBenignOutput })}
 						/>
 						<BooleanField
 							label="Label retrieved documents"
@@ -215,8 +218,8 @@ function RunsPage() {
 							checked={form.labelRetrievedDocuments}
 							onCheckedChange={(labelRetrievedDocuments) => setForm({ ...form, labelRetrievedDocuments })}
 						/>
-						<div className="flex items-end">
-							<Button type="submit" disabled={startRun.isPending}>
+						<div className="flex items-end col-span-full">
+							<Button className="w-full" type="submit" disabled={startRun.isPending}>
 								<PlayIcon data-icon="inline-start" />
 								Start run
 							</Button>
@@ -282,7 +285,7 @@ function PromptVersionSelect<T extends string>({
 }) {
 	return (
 		<Select value={value} onValueChange={(next) => onChange(next as T)}>
-			<SelectTrigger>
+			<SelectTrigger className="w-full">
 				<SelectValue />
 			</SelectTrigger>
 			<SelectContent>
@@ -311,7 +314,7 @@ function EntitySelect({
 }) {
 	return (
 		<Select value={value} onValueChange={onChange}>
-			<SelectTrigger>
+			<SelectTrigger className="w-full">
 				<SelectValue placeholder={placeholder} />
 			</SelectTrigger>
 			<SelectContent>
@@ -350,8 +353,9 @@ function BooleanField({
 }
 
 function Field({ label, children, col = 1 }: { label: string; children: React.ReactNode; col?: number }) {
+	const cols = ["col-span-1", "col-span-2", "col-span-3", "col-span-4"];
 	return (
-		<label className={`flex flex-col gap-2 col-span-${col}`}>
+		<label className={`flex flex-col gap-2 ${cols[col - 1]}`}>
 			<Label>{label}</Label>
 			{children}
 		</label>

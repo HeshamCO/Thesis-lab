@@ -5,6 +5,27 @@ import type {
 	SuccessStepInput,
 } from "../../src/lib/thesis/schemas";
 
+export type AttackEffect = "none" | "partial" | "full";
+
+export type WhyItFailed =
+	| "retrieval_miss"
+	| "ignored_as_untrusted"
+	| "partial_instruction_following"
+	| "tool_policy_blocked"
+	| "defense_filter_dropped"
+	| "succeeded"
+	| "other";
+
+export type AttackTelemetry = {
+	retrieved: boolean;
+	citedMaliciousDoc: boolean;
+	attackEffect: AttackEffect;
+	utilityPreserved: boolean;
+	toolCallAttempted: boolean;
+	secretLeakageAttempted: boolean;
+	whyItFailed: WhyItFailed;
+};
+
 export type AttemptHistoryEntry = {
 	attemptNumber: number;
 	strategy: string;
@@ -12,6 +33,21 @@ export type AttemptHistoryEntry = {
 	benignResponsePreview: string;
 	failedRequiredSteps: string[];
 	feedbackGuidance: string;
+	retrieved?: boolean;
+	citedMaliciousDoc?: boolean;
+	attackEffect?: AttackEffect;
+	utilityPreserved?: boolean;
+	toolCallAttempted?: boolean;
+	secretLeakageAttempted?: boolean;
+	whyItFailed?: WhyItFailed;
+};
+
+export type BenignStructuredOutput = {
+	task_answer: string;
+	used_docs: number[];
+	suspicious_instruction_detected: boolean;
+	tool_called: boolean;
+	sensitive_data_exposed: boolean;
 };
 
 export type BuiltPrompt = {
@@ -34,11 +70,13 @@ export type BenignBuildParams = {
 	hasSafetyClause: boolean;
 	labelRetrievedDocuments: boolean;
 	toolsAvailable: boolean;
+	structuredBenignOutput: boolean;
 };
 
 export type JudgeBuildParams = {
 	step: SuccessStepInput;
 	benignResponse: string;
+	benignStructured?: BenignStructuredOutput | null;
 };
 
 export type AttackerPromptVersion = {

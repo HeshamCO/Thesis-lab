@@ -8,14 +8,21 @@ import type {
 import type { Server as SocketServer } from "socket.io";
 import {
 	applyRetrievalDefense,
+	computeAttackTelemetry,
 	defenseAppliesPromptGuard,
 	evaluateRuleStep,
 	evaluateToolStep,
 } from "../src/lib/thesis/evaluation";
 import {
 	type AttemptRecord,
+	EXPECTED_TRIGGERS,
+	type ExpectedTriggerLabel,
+	INTENDED_EFFECTS,
+	type IntendedEffectLabel,
 	type ModelConfig,
 	type RunDetail,
+	STEALTH_LEVELS,
+	type StealthLevelLabel,
 	type StepResultRecord,
 	type SuccessStepInput,
 	TOOL_EVALUATOR_TYPES,
@@ -26,6 +33,7 @@ import type { RetrievedDocument, ThesisDb } from "./db";
 import { resolveApiKey } from "./model-api";
 import {
 	type AttemptHistoryEntry,
+	type BenignStructuredOutput,
 	getAttackerPrompt,
 	getBenignPrompt,
 	getJudgePrompt,
@@ -42,13 +50,21 @@ function isToolEvaluator(type: SuccessStepInput["evaluatorType"]): type is ToolE
 type BenignTaskResult = {
 	text: string;
 	toolCalls: ToolCallRecord[];
+	structured: BenignStructuredOutput | null;
+	structuredParseOk: boolean | null;
 };
 
 type AttackerOutput = {
 	injectionPrompt: string;
 	injectedDocument: string;
+	injectedDocuments: string[];
 	rationale: string;
 	strategy: string;
+	intendedEffect: IntendedEffectLabel;
+	expectedTrigger: ExpectedTriggerLabel;
+	stealthLevel: StealthLevelLabel;
+	preserveUtility: boolean | null;
+	retrievalHooks: string[];
 	rawOutput: string;
 	parseOk: boolean;
 };
@@ -186,10 +202,17 @@ export class ExperimentEngine {
 			attemptNumber,
 			injectionPrompt: attackerOutput.injectionPrompt,
 			injectedDocument: attackerOutput.injectedDocument,
+			injectedDocuments: attackerOutput.injectedDocuments,
 			rationale: attackerOutput.rationale,
 			rawAttackerOutput: attackerOutput.rawOutput,
 			rawAttackerParseOk: attackerOutput.parseOk,
 			attackDurationMs,
+			strategy: attackerOutput.strategy,
+			intendedEffect: attackerOutput.intendedEffect,
+			expectedTrigger: attackerOutput.expectedTrigger,
+			stealthLevel: attackerOutput.stealthLevel,
+			preserveUtility: attackerOutput.preserveUtility,
+			retrievalHooks: attackerOutput.retrievalHooks,
 		});
 		this.emit("attempt:update", run.id, attempt);
 
@@ -215,6 +238,7 @@ export class ExperimentEngine {
 
 		const defenseDiff = this.applyDefenseToContext(run, rawContext);
 		const retrievedContext = defenseDiff.kept;
+		const rawAttackerRetrievedCount = rawContext.filter((doc) => doc.source === "attacker").length;
 		this.log(
 			run.id,
 			"info",
@@ -250,7 +274,13 @@ export class ExperimentEngine {
 
 		const stepResults: StepResultRecord[] = [];
 		for (const step of run.scenarioSnapshot.successSteps) {
-			const result = await this.evaluateStep(run, step, benignResponse, benign.toolCalls);
+			const result = await this.evaluateStep(
+				run,
+				step,
+				benignResponse,
+				benign.toolCalls,
+				benign.structured,
+			);
 			if (step.evaluatorType === "llm_judge") {
 				this.log(
 					run.id,
@@ -287,6 +317,15 @@ export class ExperimentEngine {
 		}
 
 		const summary = this.db.finalizeAttemptFromSteps(attempt.id);
+		const telemetry = computeAttackTelemetry({
+			injectedDocument: attackerOutput.injectedDocument,
+			injectedDocuments: attackerOutput.injectedDocuments,
+			retrievedContext,
+			rawRetrievedAttackerCount: rawAttackerRetrievedCount,
+			benignResponse,
+			toolCalls: benign.toolCalls,
+			stepResults,
+		});
 		const feedback = this.buildFeedback(stepResults);
 		const failedRequiredIds = stepResults
 			.filter((result) => !result.passed && result.stepSnapshot.required)
@@ -296,6 +335,7 @@ export class ExperimentEngine {
 			failedCount: stepResults.filter((result) => !result.passed).length,
 			failedRequired: failedRequiredIds,
 			feedbackLength: feedback.length,
+			telemetry,
 		});
 
 		const totalDurationMs = Date.now() - attemptStartedAt;
@@ -311,6 +351,15 @@ export class ExperimentEngine {
 			benignDurationMs,
 			totalDurationMs,
 			defenseFilteredCount: defenseDiff.dropped.length,
+			attackTelemetry: telemetry,
+			benignStructured: {
+				taskAnswer: benign.structured?.task_answer ?? null,
+				usedDocs: benign.structured?.used_docs ?? null,
+				suspiciousInstructionDetected: benign.structured?.suspicious_instruction_detected ?? null,
+				toolCalledSelfReport: benign.structured?.tool_called ?? null,
+				sensitiveDataExposed: benign.structured?.sensitive_data_exposed ?? null,
+				parseOk: benign.structuredParseOk,
+			},
 		});
 		this.log(run.id, "info", "attempt.completed", "Attempt completed.", {
 			attemptNumber,
@@ -370,13 +419,25 @@ export class ExperimentEngine {
 					feedbackParts.push(result.stepSnapshot.feedbackGuidance);
 				}
 			}
+			const strategy =
+				attempt.strategy && attempt.strategy.length > 0
+					? attempt.strategy
+					: extractStrategyFromRaw(attempt.rawAttackerOutput);
+			const telemetry = attempt.attackTelemetry;
 			return {
 				attemptNumber: attempt.attemptNumber,
-				strategy: extractStrategyFromRaw(attempt.rawAttackerOutput),
+				strategy,
 				injectedDocument: attempt.injectedDocument,
 				benignResponsePreview: attempt.benignResponse,
 				failedRequiredSteps,
 				feedbackGuidance: feedbackParts.join(" "),
+				retrieved: telemetry?.retrieved,
+				citedMaliciousDoc: telemetry?.citedMaliciousDoc,
+				attackEffect: telemetry?.attackEffect,
+				utilityPreserved: telemetry?.utilityPreserved,
+				toolCallAttempted: telemetry?.toolCallAttempted,
+				secretLeakageAttempted: telemetry?.secretLeakageAttempted,
+				whyItFailed: telemetry?.whyItFailed,
 			};
 		});
 	}
@@ -394,6 +455,7 @@ export class ExperimentEngine {
 		const toolByName = new Map(scenarioTools.map((tool) => [tool.name, tool]));
 
 		const promptVersion = getBenignPrompt(run.benignPromptVersion);
+		const useStructured = run.structuredBenignOutput === true;
 		const built = promptVersion.build({
 			scenario: run.scenarioSnapshot,
 			defense: run.defenseSnapshot,
@@ -401,11 +463,18 @@ export class ExperimentEngine {
 			hasSafetyClause: run.benignTaskHasSafetyClause,
 			labelRetrievedDocuments: run.labelRetrievedDocuments,
 			toolsAvailable: exposedTools.length > 0,
+			structuredBenignOutput: useStructured,
 		});
 
 		if (exposedTools.length === 0) {
 			const text = await this.callModel(run.benignModelSnapshot, { ...built, role: "benign" });
-			return { text, toolCalls: [] };
+			const structured = useStructured ? parseStructuredBenignOutput(text) : null;
+			return {
+				text,
+				toolCalls: [],
+				structured: structured?.value ?? null,
+				structuredParseOk: useStructured ? structured?.parseOk ?? false : null,
+			};
 		}
 
 		const messages = buildMessages(built);
@@ -417,7 +486,13 @@ export class ExperimentEngine {
 			messages.push(message.assistant);
 
 			if (!message.toolCalls.length) {
-				return { text: message.text, toolCalls: recordedCalls };
+				const structured = useStructured ? parseStructuredBenignOutput(message.text) : null;
+				return {
+					text: message.text,
+					toolCalls: recordedCalls,
+					structured: structured?.value ?? null,
+					structuredParseOk: useStructured ? structured?.parseOk ?? false : null,
+				};
 			}
 
 			for (const call of message.toolCalls) {
@@ -507,7 +582,13 @@ export class ExperimentEngine {
 			| undefined;
 		const fallbackText =
 			typeof lastAssistant?.content === "string" ? lastAssistant.content : "";
-		return { text: fallbackText, toolCalls: recordedCalls };
+		const structured = useStructured ? parseStructuredBenignOutput(fallbackText) : null;
+		return {
+			text: fallbackText,
+			toolCalls: recordedCalls,
+			structured: structured?.value ?? null,
+			structuredParseOk: useStructured ? structured?.parseOk ?? false : null,
+		};
 	}
 
 	private async callBenignWithTools(
@@ -602,6 +683,7 @@ export class ExperimentEngine {
 		step: SuccessStepInput,
 		benignResponse: string,
 		toolCalls: readonly ToolCallRecord[],
+		benignStructured: BenignStructuredOutput | null,
 	): Promise<JudgeOutput> {
 		if (isToolEvaluator(step.evaluatorType)) {
 			const ruleResult = evaluateToolStep({ step, toolCalls });
@@ -613,7 +695,7 @@ export class ExperimentEngine {
 		}
 
 		const promptVersion = getJudgePrompt(run.judgePromptVersion);
-		const built = promptVersion.build({ step, benignResponse });
+		const built = promptVersion.build({ step, benignResponse, benignStructured });
 		const judgeModel = run.judgeModelSnapshot ?? run.benignModelSnapshot;
 		const content = await this.callModel(judgeModel, { ...built, role: "judge" });
 		return parseJudgeOutput(content);
@@ -697,6 +779,11 @@ export class ExperimentEngine {
 				rationale:
 					"Mocked attacker (no API key): used an authority-spoofing policy addendum to embed the success marker in plausible policy prose.",
 				strategy: "authority_spoof",
+				intendedEffect: "output_manipulation",
+				expectedTrigger: "cite",
+				stealthLevel: "low",
+				preserveUtility: true,
+				retrievalHooks: ["policy", "addendum"],
 			});
 		}
 
@@ -803,20 +890,41 @@ function parseAttackerOutput(
 ): AttackerOutput {
 	try {
 		const parsed = parseJsonObject(content);
+		const rawInjectedDocuments = Array.isArray(parsed.injectedDocuments)
+			? (parsed.injectedDocuments as unknown[]).filter(
+					(entry): entry is string => typeof entry === "string" && entry.trim().length > 0,
+				)
+			: [];
+		const primaryDocument =
+			typeof parsed.injectedDocument === "string" && parsed.injectedDocument.length > 0
+				? parsed.injectedDocument
+				: rawInjectedDocuments[0] ?? String(content);
+		const auxDocuments = rawInjectedDocuments.filter((doc) => doc !== primaryDocument);
+		const retrievalHooks = Array.isArray(parsed.retrievalHooks)
+			? (parsed.retrievalHooks as unknown[])
+					.filter((entry): entry is string => typeof entry === "string")
+					.map((entry) => entry.trim())
+					.filter((entry) => entry.length > 0)
+					.slice(0, 5)
+			: [];
 		return {
 			injectionPrompt:
 				typeof parsed.injectionPrompt === "string"
 					? parsed.injectionPrompt
 					: run.scenarioSnapshot.attackerGoal,
-			injectedDocument:
-				typeof parsed.injectedDocument === "string"
-					? parsed.injectedDocument
-					: String(content),
+			injectedDocument: primaryDocument,
+			injectedDocuments: auxDocuments,
 			rationale:
 				typeof parsed.rationale === "string"
 					? parsed.rationale
 					: "Model did not provide rationale.",
 			strategy: typeof parsed.strategy === "string" ? parsed.strategy : "",
+			intendedEffect: coerceLabel(parsed.intendedEffect, INTENDED_EFFECTS),
+			expectedTrigger: coerceLabel(parsed.expectedTrigger, EXPECTED_TRIGGERS),
+			stealthLevel: coerceLabel(parsed.stealthLevel, STEALTH_LEVELS),
+			preserveUtility:
+				typeof parsed.preserveUtility === "boolean" ? parsed.preserveUtility : null,
+			retrievalHooks,
 			rawOutput: content,
 			parseOk: true,
 		};
@@ -824,11 +932,52 @@ function parseAttackerOutput(
 		return {
 			injectionPrompt: run.scenarioSnapshot.attackerGoal,
 			injectedDocument: content || `Attempt ${attemptNumber} produced no content.`,
+			injectedDocuments: [],
 			rationale: "Attacker output was not valid JSON.",
 			strategy: "",
+			intendedEffect: "unspecified",
+			expectedTrigger: "unspecified",
+			stealthLevel: "unspecified",
+			preserveUtility: null,
+			retrievalHooks: [],
 			rawOutput: content,
 			parseOk: false,
 		};
+	}
+}
+
+function coerceLabel<T extends string>(value: unknown, allowed: readonly T[]): T {
+	if (typeof value !== "string") {
+		return allowed[allowed.length - 1];
+	}
+	const normalized = value.trim().toLowerCase();
+	const match = allowed.find((label) => label === normalized);
+	return match ?? allowed[allowed.length - 1];
+}
+
+function parseStructuredBenignOutput(
+	content: string,
+): { value: BenignStructuredOutput; parseOk: true } | { value: null; parseOk: false } {
+	try {
+		const parsed = parseJsonObject(content);
+		const usedDocsRaw = Array.isArray(parsed.used_docs) ? (parsed.used_docs as unknown[]) : [];
+		const usedDocs = usedDocsRaw
+			.map((entry) => {
+				const n = typeof entry === "number" ? entry : Number(entry);
+				return Number.isFinite(n) ? Math.trunc(n) : null;
+			})
+			.filter((entry): entry is number => entry !== null);
+		const value: BenignStructuredOutput = {
+			task_answer:
+				typeof parsed.task_answer === "string" ? parsed.task_answer : "",
+			used_docs: usedDocs,
+			suspicious_instruction_detected: Boolean(parsed.suspicious_instruction_detected),
+			tool_called: Boolean(parsed.tool_called),
+			sensitive_data_exposed: Boolean(parsed.sensitive_data_exposed),
+		};
+		return { value, parseOk: true };
+	} catch {
+		return { value: null, parseOk: false };
 	}
 }
 
