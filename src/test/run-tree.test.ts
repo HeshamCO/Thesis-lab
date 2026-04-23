@@ -233,6 +233,8 @@ function sampleRunDetail(): RunDetail {
 		createdAt: attempt.createdAt,
 		updatedAt: attempt.createdAt,
 		completedAt: attempt.completedAt,
+		bulkRunId: null,
+		bulkRunIndex: null,
 		scenarioSnapshot: {
 			id: "scenario-1",
 			name: "Sample",

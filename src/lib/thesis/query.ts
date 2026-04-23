@@ -6,4 +6,6 @@ export const queryKeys = {
 	defenses: ["defenses"] as const,
 	runs: ["runs"] as const,
 	run: (id: string) => ["runs", id] as const,
+	bulkRuns: ["bulk-runs"] as const,
+	bulkRun: (id: string) => ["bulk-runs", id] as const,
 };

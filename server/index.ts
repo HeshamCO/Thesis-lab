@@ -4,11 +4,13 @@ import { createServer } from "node:http";
 import { Server } from "socket.io";
 import {
 	ACTIVE_RUN_STATUSES,
+	bulkRunInputSchema,
 	defenseConfigInputSchema,
 	modelConfigInputSchema,
 	scenarioInputSchema,
 	startRunInputSchema,
 } from "../src/lib/thesis/schemas";
+import { computeBulkRunDashboard } from "../src/lib/thesis/bulk-dashboard";
 import { thesisDb } from "./db";
 import { ExperimentEngine } from "./engine";
 import { testModelConnection } from "./model-health";
@@ -171,6 +173,105 @@ app.post("/api/runs", (request, response) => {
 	});
 	engine.start(run.id);
 	response.status(201).json(run);
+});
+
+app.get("/api/bulk-runs", (_request, response) => {
+	response.json(thesisDb.listBulkRuns());
+});
+
+app.post("/api/bulk-runs", (request, response) => {
+	const input = bulkRunInputSchema.parse(request.body);
+	const allScenarios = thesisDb.listScenarios();
+	const targetScenarios =
+		input.scenarioIds && input.scenarioIds.length > 0
+			? allScenarios.filter((scenario) => input.scenarioIds!.includes(scenario.id))
+			: allScenarios;
+	if (targetScenarios.length === 0) {
+		response.status(400).json({ error: "No scenarios selected or available." });
+		return;
+	}
+
+	const defense = thesisDb.getDefense(input.defenseConfigId);
+	const attackerModel = thesisDb.getModel(input.attackerModelId);
+	const benignModel = thesisDb.getModel(input.benignModelId);
+	const judgeModel = input.judgeModelId ? thesisDb.getModel(input.judgeModelId) : null;
+	if (!defense || !attackerModel || !benignModel) {
+		response.status(400).json({ error: "Selected model or defense was not found." });
+		return;
+	}
+	if (input.judgeModelId && !judgeModel) {
+		response.status(400).json({ error: "Selected judge model was not found." });
+		return;
+	}
+
+	const activeSolo = thesisDb
+		.listRuns()
+		.find(
+			(run) =>
+				!run.bulkRunId &&
+				(run.status === "queued" || run.status === "running" || run.status === "pausing"),
+		);
+	if (activeSolo) {
+		response.status(409).json({ error: "A non-bulk run is currently active. Wait for it to finish." });
+		return;
+	}
+
+	const bulk = thesisDb.createBulkRun({
+		name: input.name,
+		totalRuns: targetScenarios.length,
+		config: {
+			attackerModelId: input.attackerModelId,
+			benignModelId: input.benignModelId,
+			judgeModelId: input.judgeModelId ?? null,
+			defenseConfigId: input.defenseConfigId,
+			maxAttempts: input.maxAttempts,
+			retrievalSettings: input.retrievalSettings,
+			attackerPromptVersion: input.attackerPromptVersion,
+			benignPromptVersion: input.benignPromptVersion,
+			judgePromptVersion: input.judgePromptVersion,
+			benignTaskHasSafetyClause: input.benignTaskHasSafetyClause,
+			labelRetrievedDocuments: input.labelRetrievedDocuments,
+			structuredBenignOutput: input.structuredBenignOutput,
+		},
+	});
+
+	const createdRuns = targetScenarios.map((scenario, index) =>
+		thesisDb.createRun({
+			scenario,
+			defense,
+			attackerModel,
+			benignModel,
+			judgeModel,
+			maxAttempts: input.maxAttempts,
+			retrievalSettings: input.retrievalSettings,
+			attackerPromptVersion: input.attackerPromptVersion,
+			benignPromptVersion: input.benignPromptVersion,
+			judgePromptVersion: input.judgePromptVersion,
+			benignTaskHasSafetyClause: input.benignTaskHasSafetyClause,
+			labelRetrievedDocuments: input.labelRetrievedDocuments,
+			structuredBenignOutput: input.structuredBenignOutput,
+			bulkRunId: bulk.id,
+			bulkRunIndex: index,
+		}),
+	);
+
+	if (createdRuns[0]) {
+		engine.start(createdRuns[0].id);
+	}
+
+	response.status(201).json({ bulkRun: bulk, runCount: createdRuns.length });
+});
+
+app.get("/api/bulk-runs/:id", (request, response) => {
+	const bulk = thesisDb.getBulkRun(request.params.id);
+	if (!bulk) {
+		response.status(404).json({ error: "Bulk run not found." });
+		return;
+	}
+	const runs = thesisDb.listRunsByBulkRun(bulk.id);
+	const attempts = runs.flatMap((run) => thesisDb.getRun(run.id).attempts);
+	const dashboard = computeBulkRunDashboard(bulk, runs, attempts);
+	response.json({ bulkRun: bulk, runs, dashboard });
 });
 
 app.get("/api/runs/:id", (request, response) => {

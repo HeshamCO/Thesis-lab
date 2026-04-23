@@ -115,12 +115,17 @@ export class ExperimentEngine {
 	}
 
 	private async execute(runId: string) {
+		let bulkRunId: string | null = null;
 		try {
 			this.db.updateRunStatus(runId, "running");
 			this.emitRun(runId);
 			this.log(runId, "info", "run.started", "Run execution started.", {});
 
 			let run = this.db.getRun(runId);
+			bulkRunId = run.bulkRunId;
+			if (bulkRunId) {
+				this.db.updateBulkRunStatus(bulkRunId, "running");
+			}
 			let previousFeedback = this.latestFeedback(run);
 			let nextAttempt =
 				run.attempts.filter(
@@ -145,6 +150,7 @@ export class ExperimentEngine {
 						attemptNumber: nextAttempt,
 					});
 					this.emitRun(runId, true);
+					this.advanceBulkRun(bulkRunId);
 					return;
 				}
 
@@ -158,11 +164,23 @@ export class ExperimentEngine {
 				maxAttempts: run.maxAttempts,
 			});
 			this.emitRun(runId, true);
+			this.advanceBulkRun(bulkRunId);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Run failed.";
 			this.db.updateRunStatus(runId, "failed", message);
 			this.log(runId, "error", "run.failed", message, {});
 			this.emitRun(runId, true);
+			this.advanceBulkRun(bulkRunId);
+		}
+	}
+
+	private advanceBulkRun(bulkRunId: string | null) {
+		if (!bulkRunId) return;
+		const next = this.db.getNextQueuedRunInBulk(bulkRunId);
+		if (next) {
+			setTimeout(() => this.start(next), 0);
+		} else {
+			this.db.updateBulkRunStatus(bulkRunId, "completed");
 		}
 	}
 

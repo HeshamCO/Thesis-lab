@@ -215,6 +215,54 @@ export type RunSummary = {
 	utilityScore: number;
 };
 
+export const BULK_RUN_STATUSES = ["queued", "running", "completed", "failed"] as const;
+export type BulkRunStatus = (typeof BULK_RUN_STATUSES)[number];
+
+export type BulkRunConfig = {
+	attackerModelId: string;
+	benignModelId: string;
+	judgeModelId: string | null;
+	defenseConfigId: string;
+	maxAttempts: number;
+	retrievalSettings: RetrievalSettings;
+	attackerPromptVersion: string;
+	benignPromptVersion: string;
+	judgePromptVersion: string;
+	benignTaskHasSafetyClause: boolean;
+	labelRetrievedDocuments: boolean;
+	structuredBenignOutput: boolean;
+};
+
+export type BulkRunRecord = {
+	id: string;
+	name: string;
+	status: BulkRunStatus;
+	totalRuns: number;
+	config: BulkRunConfig;
+	createdAt: string;
+	updatedAt: string;
+	completedAt: string | null;
+};
+
+export const bulkRunInputSchema = z.object({
+	name: z.string().min(1).max(200),
+	scenarioIds: z.array(z.string().min(1)).optional(),
+	attackerModelId: z.string().min(1),
+	benignModelId: z.string().min(1),
+	judgeModelId: z.string().min(1).optional(),
+	defenseConfigId: z.string().min(1),
+	maxAttempts: z.coerce.number().int().min(1).max(50),
+	retrievalSettings: retrievalSettingsSchema,
+	attackerPromptVersion: z.enum(ATTACKER_PROMPT_VERSIONS).default(DEFAULT_ATTACKER_PROMPT_VERSION),
+	benignPromptVersion: z.enum(BENIGN_PROMPT_VERSIONS).default(DEFAULT_BENIGN_PROMPT_VERSION),
+	judgePromptVersion: z.enum(JUDGE_PROMPT_VERSIONS).default(DEFAULT_JUDGE_PROMPT_VERSION),
+	benignTaskHasSafetyClause: z.coerce.boolean().default(true),
+	labelRetrievedDocuments: z.coerce.boolean().default(false),
+	structuredBenignOutput: z.coerce.boolean().default(true),
+});
+
+export type BulkRunInput = z.infer<typeof bulkRunInputSchema>;
+
 export type RunListItem = {
 	id: string;
 	status: RunStatus;
@@ -235,6 +283,8 @@ export type RunListItem = {
 	createdAt: string;
 	updatedAt: string;
 	completedAt: string | null;
+	bulkRunId: string | null;
+	bulkRunIndex: number | null;
 };
 
 export type AttemptRecord = {

@@ -1,6 +1,8 @@
 import type {
 	AttackerArtifact,
 	AttemptRecord,
+	BulkRunInput,
+	BulkRunRecord,
 	DefenseConfig,
 	DefenseConfigInput,
 	ModelConfig,
@@ -15,6 +17,7 @@ import type {
 	StepResultRecord,
 	ToolCallRecord,
 } from "./schemas";
+import type { BulkRunDashboard } from "./bulk-dashboard";
 
 export type AttemptDetail = {
 	attempt: AttemptRecord;
@@ -111,4 +114,14 @@ export const api = {
 	attempt: (runId: string, attemptId: string) => request<AttemptDetail>(`/api/runs/${runId}/attempts/${attemptId}`),
 	artifact: (runId: string, attemptId: string, artifactId: string) =>
 		request<AttackerArtifact>(`/api/runs/${runId}/attempts/${attemptId}/artifacts/${artifactId}`),
+	bulkRuns: () => request<BulkRunRecord[]>("/api/bulk-runs"),
+	bulkRun: (id: string) =>
+		request<{ bulkRun: BulkRunRecord; runs: RunListItem[]; dashboard: BulkRunDashboard }>(
+			`/api/bulk-runs/${id}`,
+		),
+	createBulkRun: (data: BulkRunInput) =>
+		request<{ bulkRun: BulkRunRecord; runCount: number }>("/api/bulk-runs", {
+			method: "POST",
+			body: JSON.stringify(data),
+		}),
 };

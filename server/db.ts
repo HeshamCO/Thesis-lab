@@ -12,6 +12,9 @@ import type {
 	AttackerArtifactKind,
 	AttemptRecord,
 	AttemptStatus,
+	BulkRunConfig,
+	BulkRunRecord,
+	BulkRunStatus,
 	DefenseConfig,
 	DefenseConfigInput,
 	ExpectedTriggerLabel,
@@ -228,6 +231,17 @@ export class ThesisDb {
 				updated_at TEXT NOT NULL
 			);
 
+			CREATE TABLE IF NOT EXISTS bulk_runs (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				status TEXT NOT NULL,
+				total_runs INTEGER NOT NULL DEFAULT 0,
+				config TEXT NOT NULL DEFAULT '{}',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL,
+				completed_at TEXT
+			);
+
 			CREATE TABLE IF NOT EXISTS runs (
 				id TEXT PRIMARY KEY,
 				status TEXT NOT NULL,
@@ -381,6 +395,8 @@ export class ThesisDb {
 		this.addColumnIfMissing('attempts', 'benign_tool_called_self_report', 'INTEGER');
 		this.addColumnIfMissing('attempts', 'benign_sensitive_data_exposed', 'INTEGER');
 		this.addColumnIfMissing('attempts', 'benign_structured_parse_ok', 'INTEGER');
+		this.addColumnIfMissing('runs', 'bulk_run_id', 'TEXT');
+		this.addColumnIfMissing('runs', 'bulk_run_index', 'INTEGER');
 	}
 
 	private addColumnIfMissing(table: string, column: string, definition: string) {
@@ -434,6 +450,70 @@ export class ThesisDb {
 				allowedTools: ['lookup_order', 'lookup_invoice', 'lookup_user', 'get_user_profile'],
 			});
 		}
+	}
+
+	createBulkRun(input: {
+		name: string;
+		config: BulkRunConfig;
+		totalRuns: number;
+	}): BulkRunRecord {
+		const bulkId = id('bulk');
+		const timestamp = now();
+		this.db
+			.prepare(
+				`INSERT INTO bulk_runs (id, name, status, total_runs, config, created_at, updated_at, completed_at)
+				VALUES (?, ?, 'queued', ?, ?, ?, ?, NULL)`,
+			)
+			.run(bulkId, input.name, input.totalRuns, stringify(input.config), timestamp, timestamp);
+		return this.getBulkRun(bulkId)!;
+	}
+
+	listBulkRuns(): BulkRunRecord[] {
+		return this.db
+			.prepare('SELECT * FROM bulk_runs ORDER BY created_at DESC')
+			.all()
+			.map((row) => this.hydrateBulkRun(row as SqlRow));
+	}
+
+	getBulkRun(bulkRunId: string): BulkRunRecord | null {
+		const row = this.db.prepare('SELECT * FROM bulk_runs WHERE id = ?').get(bulkRunId) as SqlRow | undefined;
+		return row ? this.hydrateBulkRun(row) : null;
+	}
+
+	updateBulkRunStatus(bulkRunId: string, status: BulkRunStatus) {
+		const completedAt = status === 'completed' || status === 'failed' ? now() : null;
+		this.db
+			.prepare('UPDATE bulk_runs SET status = ?, updated_at = ?, completed_at = COALESCE(?, completed_at) WHERE id = ?')
+			.run(status, now(), completedAt, bulkRunId);
+	}
+
+	listRunsByBulkRun(bulkRunId: string): RunListItem[] {
+		return this.db
+			.prepare('SELECT * FROM runs WHERE bulk_run_id = ? ORDER BY bulk_run_index ASC, created_at ASC')
+			.all(bulkRunId)
+			.map((row) => this.hydrateRunListItem(row as SqlRow));
+	}
+
+	getNextQueuedRunInBulk(bulkRunId: string): string | null {
+		const row = this.db
+			.prepare(
+				"SELECT id FROM runs WHERE bulk_run_id = ? AND status = 'queued' ORDER BY bulk_run_index ASC, created_at ASC LIMIT 1",
+			)
+			.get(bulkRunId) as { id?: string } | undefined;
+		return row?.id ?? null;
+	}
+
+	private hydrateBulkRun(row: SqlRow): BulkRunRecord {
+		return {
+			id: String(row.id),
+			name: String(row.name),
+			status: String(row.status) as BulkRunStatus,
+			totalRuns: Number(row.total_runs ?? 0),
+			config: parseJson(row.config, {} as BulkRunConfig),
+			createdAt: String(row.created_at),
+			updatedAt: String(row.updated_at),
+			completedAt: row.completed_at ? String(row.completed_at) : null,
+		};
 	}
 
 	recoverInterruptedRuns() {
@@ -677,10 +757,16 @@ export class ThesisDb {
 		benignTaskHasSafetyClause?: boolean;
 		labelRetrievedDocuments?: boolean;
 		structuredBenignOutput?: boolean;
+		bulkRunId?: string | null;
+		bulkRunIndex?: number | null;
 	}): RunDetail {
-		const active = this.db.prepare("SELECT id FROM runs WHERE status IN ('queued', 'running', 'pausing')").get();
-		if (active) {
-			throw new Error('Only one active run is supported in v1.');
+		if (!input.bulkRunId) {
+			const active = this.db
+				.prepare("SELECT id FROM runs WHERE status IN ('queued', 'running', 'pausing') AND (bulk_run_id IS NULL OR bulk_run_id = '')")
+				.get();
+			if (active) {
+				throw new Error('Only one active run is supported in v1.');
+			}
 		}
 
 		const runId = id('run');
@@ -701,8 +787,8 @@ export class ThesisDb {
 				max_attempts, retrieval_settings, summary, error, created_at, updated_at, completed_at,
 				attacker_prompt_version, benign_prompt_version, judge_prompt_version,
 				benign_task_has_safety_clause, label_retrieved_documents, structured_benign_output,
-				judge_model_id, judge_model_snapshot)
-				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				judge_model_id, judge_model_snapshot, bulk_run_id, bulk_run_index)
+				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				runId,
@@ -726,6 +812,8 @@ export class ThesisDb {
 				structuredBenignOutput ? 1 : 0,
 				judgeModelId,
 				judgeModelSnapshot,
+				input.bulkRunId ?? null,
+				input.bulkRunIndex ?? null,
 			);
 
 		for (const document of input.scenario.documents) {
@@ -1347,6 +1435,11 @@ export class ThesisDb {
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 			completedAt: row.completed_at ? String(row.completed_at) : null,
+			bulkRunId: row.bulk_run_id ? String(row.bulk_run_id) : null,
+			bulkRunIndex:
+				row.bulk_run_index === null || row.bulk_run_index === undefined
+					? null
+					: Number(row.bulk_run_index),
 		};
 	}
 
