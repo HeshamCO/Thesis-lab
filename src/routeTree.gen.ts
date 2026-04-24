@@ -17,6 +17,7 @@ import { Route as DefensesIndexRouteImport } from './routes/defenses/index'
 import { Route as BulkRunsIndexRouteImport } from './routes/bulk-runs/index'
 import { Route as ScenariosScenarioIdRouteImport } from './routes/scenarios/$scenarioId'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
+import { Route as BulkRunsCompareRouteImport } from './routes/bulk-runs/compare'
 import { Route as BulkRunsBulkRunIdRouteImport } from './routes/bulk-runs/$bulkRunId'
 
 const IndexRoute = IndexRouteImport.update({
@@ -59,6 +60,11 @@ const RunsRunIdRoute = RunsRunIdRouteImport.update({
   path: '/runs/$runId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BulkRunsCompareRoute = BulkRunsCompareRouteImport.update({
+  id: '/bulk-runs/compare',
+  path: '/bulk-runs/compare',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BulkRunsBulkRunIdRoute = BulkRunsBulkRunIdRouteImport.update({
   id: '/bulk-runs/$bulkRunId',
   path: '/bulk-runs/$bulkRunId',
@@ -68,6 +74,7 @@ const BulkRunsBulkRunIdRoute = BulkRunsBulkRunIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/bulk-runs/$bulkRunId': typeof BulkRunsBulkRunIdRoute
+  '/bulk-runs/compare': typeof BulkRunsCompareRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
   '/bulk-runs/': typeof BulkRunsIndexRoute
@@ -79,6 +86,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/bulk-runs/$bulkRunId': typeof BulkRunsBulkRunIdRoute
+  '/bulk-runs/compare': typeof BulkRunsCompareRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
   '/bulk-runs': typeof BulkRunsIndexRoute
@@ -91,6 +99,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/bulk-runs/$bulkRunId': typeof BulkRunsBulkRunIdRoute
+  '/bulk-runs/compare': typeof BulkRunsCompareRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
   '/bulk-runs/': typeof BulkRunsIndexRoute
@@ -104,6 +113,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/bulk-runs/$bulkRunId'
+    | '/bulk-runs/compare'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
     | '/bulk-runs/'
@@ -115,6 +125,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/bulk-runs/$bulkRunId'
+    | '/bulk-runs/compare'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
     | '/bulk-runs'
@@ -126,6 +137,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/bulk-runs/$bulkRunId'
+    | '/bulk-runs/compare'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
     | '/bulk-runs/'
@@ -138,6 +150,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   BulkRunsBulkRunIdRoute: typeof BulkRunsBulkRunIdRoute
+  BulkRunsCompareRoute: typeof BulkRunsCompareRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
   ScenariosScenarioIdRoute: typeof ScenariosScenarioIdRoute
   BulkRunsIndexRoute: typeof BulkRunsIndexRoute
@@ -205,6 +218,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RunsRunIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/bulk-runs/compare': {
+      id: '/bulk-runs/compare'
+      path: '/bulk-runs/compare'
+      fullPath: '/bulk-runs/compare'
+      preLoaderRoute: typeof BulkRunsCompareRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/bulk-runs/$bulkRunId': {
       id: '/bulk-runs/$bulkRunId'
       path: '/bulk-runs/$bulkRunId'
@@ -218,6 +238,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BulkRunsBulkRunIdRoute: BulkRunsBulkRunIdRoute,
+  BulkRunsCompareRoute: BulkRunsCompareRoute,
   RunsRunIdRoute: RunsRunIdRoute,
   ScenariosScenarioIdRoute: ScenariosScenarioIdRoute,
   BulkRunsIndexRoute: BulkRunsIndexRoute,

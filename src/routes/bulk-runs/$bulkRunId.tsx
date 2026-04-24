@@ -5,6 +5,14 @@ import { StatusBadge } from "#/components/thesis/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Progress } from "#/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
+import {
+	ChartCard,
+	SimpleBar,
+	SimpleLine,
+	SimplePie,
+	formatMs,
+	formatPercent,
+} from "#/components/thesis/charts";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
 
@@ -29,6 +37,83 @@ function BulkRunDashboard() {
 		dashboard.totalRuns > 0
 			? ((dashboard.completedRuns + dashboard.failedRuns) / dashboard.totalRuns) * 100
 			: 0;
+
+	const scenarioBarData = [...dashboard.perScenario]
+		.filter((s) => s.attackSuccessRate !== null)
+		.sort((a, b) => (b.attackSuccessRate ?? 0) - (a.attackSuccessRate ?? 0))
+		.map((s) => ({
+			scenario: truncate(s.scenarioName, 22),
+			successRate: Number(((s.attackSuccessRate ?? 0) * 100).toFixed(1)),
+		}));
+
+	const scenarioAttemptsData = [...dashboard.perScenario]
+		.sort((a, b) => b.attemptsUsed - a.attemptsUsed)
+		.map((s) => ({
+			scenario: truncate(s.scenarioName, 22),
+			attempts: s.attemptsUsed,
+		}));
+
+	const attemptsPerPositionData = dashboard.attemptsPerPosition.map((p) => ({
+		position: `#${p.attemptNumber}`,
+		successRate: Number((p.successRate * 100).toFixed(1)),
+		attempts: p.total,
+	}));
+
+	const cumulativeData = dashboard.cumulativeProgress.map((p) => ({
+		runIndex: p.index,
+		successRate: Number((p.cumulativeSuccessRate * 100).toFixed(1)),
+	}));
+
+	const strategyData = dashboard.byStrategy.map((row) => ({
+		strategy: truncate(row.strategy, 18),
+		successes: row.successes,
+		failures: row.count - row.successes,
+	}));
+
+	const intendedEffectData = dashboard.byIntendedEffect.map((row) => ({
+		intendedEffect: row.intendedEffect,
+		attempts: row.count,
+		successRate: Number((row.successRate * 100).toFixed(1)),
+	}));
+
+	const stealthData = dashboard.byStealthLevel.map((row) => ({
+		stealthLevel: row.stealthLevel,
+		attempts: row.count,
+		successRate: Number((row.successRate * 100).toFixed(1)),
+	}));
+
+	const triggerData = dashboard.byExpectedTrigger.map((row) => ({
+		expectedTrigger: row.expectedTrigger,
+		attempts: row.count,
+		successRate: Number((row.successRate * 100).toFixed(1)),
+	}));
+
+	const whyFailedData = dashboard.byWhyItFailed.map((row) => ({
+		reason: row.whyItFailed,
+		count: row.count,
+	}));
+
+	const attackEffectPie = dashboard.byAttackEffect.map((row) => ({
+		name: row.attackEffect,
+		value: row.count,
+	}));
+
+	const statusPie = dashboard.runStatusCounts.map((row) => ({
+		name: row.status,
+		value: row.count,
+	}));
+
+	const outcomePie = [
+		{ name: "success", value: dashboard.successVsFailureCounts.success },
+		{ name: "failure", value: dashboard.successVsFailureCounts.failure },
+		{ name: "pending", value: dashboard.successVsFailureCounts.pending },
+	];
+
+	const durationData = [
+		{ phase: "attacker", ms: Math.round(dashboard.durationByPhase.meanAttackerMs) },
+		{ phase: "benign", ms: Math.round(dashboard.durationByPhase.meanBenignMs) },
+		{ phase: "total", ms: Math.round(dashboard.durationByPhase.meanTotalMs) },
+	];
 
 	return (
 		<>
@@ -93,6 +178,148 @@ function BulkRunDashboard() {
 				</Card>
 			</div>
 
+			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+				<ChartCard
+					title="Run status"
+					description="Distribution of child run lifecycle states."
+				>
+					<SimplePie data={statusPie} />
+				</ChartCard>
+				<ChartCard
+					title="Run outcomes"
+					description="Final attack success vs failure across completed runs."
+				>
+					<SimplePie data={outcomePie} />
+				</ChartCard>
+				<ChartCard
+					title="Attack effect"
+					description="Distribution of attack effect severity across attempts."
+				>
+					<SimplePie data={attackEffectPie} />
+				</ChartCard>
+
+				<ChartCard
+					title="Attack success rate by scenario"
+					description="Which scenarios are most vulnerable under this config?"
+					className="md:col-span-2 xl:col-span-2"
+				>
+					<SimpleBar
+						data={scenarioBarData}
+						xKey="scenario"
+						bars={[{ key: "successRate", label: "Success rate %" }]}
+						height={320}
+						yTickFormatter={(v) => `${v}%`}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Attempts used per scenario"
+					description="Scenarios requiring more attempts are harder for the attacker."
+				>
+					<SimpleBar
+						data={scenarioAttemptsData}
+						xKey="scenario"
+						bars={[{ key: "attempts", label: "Attempts", colorIndex: 1 }]}
+						height={320}
+					/>
+				</ChartCard>
+
+				<ChartCard
+					title="Attacker learning curve"
+					description="Success rate at each attempt position — does iterating help?"
+				>
+					<SimpleLine
+						data={attemptsPerPositionData}
+						xKey="position"
+						lines={[{ key: "successRate", label: "Success rate %" }]}
+						yTickFormatter={(v) => `${v}%`}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Cumulative success rate"
+					description="Running success rate as completed runs accumulate."
+				>
+					<SimpleLine
+						data={cumulativeData}
+						xKey="runIndex"
+						lines={[{ key: "successRate", label: "Cumulative success %", colorIndex: 2 }]}
+						yTickFormatter={(v) => `${v}%`}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Duration by phase"
+					description="Mean latency per attempt across attacker / benign / total."
+				>
+					<SimpleBar
+						data={durationData}
+						xKey="phase"
+						bars={[{ key: "ms", label: "Mean ms", colorIndex: 3 }]}
+						yTickFormatter={(v) => formatMs(v)}
+					/>
+				</ChartCard>
+
+				<ChartCard
+					title="Strategy: success vs failure"
+					description="Which attacker strategies land vs get blocked?"
+					className="md:col-span-2"
+				>
+					<SimpleBar
+						data={strategyData}
+						xKey="strategy"
+						bars={[
+							{ key: "successes", label: "Successes", stackId: "s" },
+							{ key: "failures", label: "Failures", colorIndex: 3, stackId: "s" },
+						]}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Intended effect"
+					description="Attempt count + success rate per intended effect."
+				>
+					<SimpleBar
+						data={intendedEffectData}
+						xKey="intendedEffect"
+						bars={[
+							{ key: "attempts", label: "Attempts" },
+							{ key: "successRate", label: "Success rate %", colorIndex: 2 },
+						]}
+					/>
+				</ChartCard>
+				<ChartCard title="Stealth level" description="How stealthy were attempts, and did it matter?">
+					<SimpleBar
+						data={stealthData}
+						xKey="stealthLevel"
+						bars={[
+							{ key: "attempts", label: "Attempts" },
+							{ key: "successRate", label: "Success rate %", colorIndex: 2 },
+						]}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Expected trigger"
+					description="Which user-intent triggers do attackers exploit?"
+				>
+					<SimpleBar
+						data={triggerData}
+						xKey="expectedTrigger"
+						bars={[
+							{ key: "attempts", label: "Attempts" },
+							{ key: "successRate", label: "Success rate %", colorIndex: 2 },
+						]}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Why attacks failed"
+					description="Failure-mode breakdown over failed attempts."
+					className="md:col-span-2"
+				>
+					<SimpleBar
+						data={whyFailedData}
+						xKey="reason"
+						bars={[{ key: "count", label: "Failures", colorIndex: 3 }]}
+					/>
+				</ChartCard>
+			</div>
+
 			<Card>
 				<CardHeader>
 					<CardTitle>Per-scenario results</CardTitle>
@@ -103,10 +330,13 @@ function BulkRunDashboard() {
 							<TableRow>
 								<TableHead>Scenario</TableHead>
 								<TableHead>Status</TableHead>
-								<TableHead>Attempts used</TableHead>
-								<TableHead>Final success</TableHead>
-								<TableHead>Attack success rate</TableHead>
+								<TableHead>Attempts</TableHead>
+								<TableHead>✓/✗</TableHead>
+								<TableHead>Final</TableHead>
+								<TableHead>ASR</TableHead>
 								<TableHead>Utility</TableHead>
+								<TableHead>Att ms</TableHead>
+								<TableHead>Ben ms</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -125,50 +355,28 @@ function BulkRunDashboard() {
 										<StatusBadge status={row.status as never} />
 									</TableCell>
 									<TableCell>{row.attemptsUsed}</TableCell>
+									<TableCell className="font-mono text-xs">
+										{row.successAttempts}/{row.failAttempts}
+									</TableCell>
 									<TableCell>
-										{row.finalSuccess === null
-											? "—"
-											: row.finalSuccess
-												? "success"
-												: "no"}
+										{row.finalSuccess === null ? "—" : row.finalSuccess ? "success" : "no"}
 									</TableCell>
 									<TableCell>
 										{row.attackSuccessRate === null
 											? "—"
-											: `${(row.attackSuccessRate * 100).toFixed(0)}%`}
+											: formatPercent(row.attackSuccessRate)}
 									</TableCell>
 									<TableCell>
 										{row.utilityScore === null ? "—" : row.utilityScore.toFixed(2)}
 									</TableCell>
+									<TableCell>{formatMs(row.meanAttackDurationMs)}</TableCell>
+									<TableCell>{formatMs(row.meanBenignDurationMs)}</TableCell>
 								</TableRow>
 							))}
 						</TableBody>
 					</Table>
 				</CardContent>
 			</Card>
-
-			<div className="grid gap-4 md:grid-cols-2">
-				<BreakdownCard
-					title="By attacker strategy"
-					keyLabel="Strategy"
-					rows={dashboard.byStrategy.map((row) => ({
-						key: row.strategy,
-						count: row.count,
-						successes: row.successes,
-						successRate: row.successRate,
-					}))}
-				/>
-				<BreakdownCard
-					title="By intended effect"
-					keyLabel="Intended effect"
-					rows={dashboard.byIntendedEffect.map((row) => ({
-						key: row.intendedEffect,
-						count: row.count,
-						successes: row.successes,
-						successRate: row.successRate,
-					}))}
-				/>
-			</div>
 
 			<Card>
 				<CardHeader>
@@ -220,50 +428,7 @@ function Metric({ label, value }: { label: string; value: number }) {
 	);
 }
 
-function BreakdownCard({
-	title,
-	keyLabel,
-	rows,
-}: {
-	title: string;
-	keyLabel: string;
-	rows: Array<{ key: string; count: number; successes: number; successRate: number }>;
-}) {
-	return (
-		<Card>
-			<CardHeader>
-				<CardTitle>{title}</CardTitle>
-			</CardHeader>
-			<CardContent>
-				<Table>
-					<TableHeader>
-						<TableRow>
-							<TableHead>{keyLabel}</TableHead>
-							<TableHead>Attempts</TableHead>
-							<TableHead>Succeeded</TableHead>
-							<TableHead>Rate</TableHead>
-						</TableRow>
-					</TableHeader>
-					<TableBody>
-						{rows.length === 0 ? (
-							<TableRow>
-								<TableCell colSpan={4} className="text-center text-muted-foreground">
-									No data yet.
-								</TableCell>
-							</TableRow>
-						) : (
-							rows.map((row) => (
-								<TableRow key={row.key}>
-									<TableCell className="font-mono text-xs">{row.key}</TableCell>
-									<TableCell>{row.count}</TableCell>
-									<TableCell>{row.successes}</TableCell>
-									<TableCell>{(row.successRate * 100).toFixed(0)}%</TableCell>
-								</TableRow>
-							))
-						)}
-					</TableBody>
-				</Table>
-			</CardContent>
-		</Card>
-	);
+function truncate(value: string, max: number) {
+	if (value.length <= max) return value;
+	return `${value.slice(0, max - 1)}…`;
 }

@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PlayIcon } from "lucide-react";
+import { GitCompareIcon, PlayIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
@@ -48,6 +48,7 @@ function BulkRunsPage() {
 	});
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
+	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
 	const scenarios = useQuery({ queryKey: queryKeys.scenarios, queryFn: api.scenarios });
 	const models = useQuery({ queryKey: queryKeys.models, queryFn: api.models });
@@ -237,13 +238,29 @@ function BulkRunsPage() {
 			</Card>
 
 			<Card>
-				<CardHeader>
+				<CardHeader className="flex flex-row items-center justify-between gap-4">
 					<CardTitle>Previous bulk runs</CardTitle>
+					<Button
+						type="button"
+						size="sm"
+						variant="outline"
+						disabled={selectedIds.length < 2}
+						onClick={() =>
+							navigate({
+								to: "/bulk-runs/compare",
+								search: { ids: selectedIds.join(",") },
+							})
+						}
+					>
+						<GitCompareIcon data-icon="inline-start" />
+						Compare ({selectedIds.length})
+					</Button>
 				</CardHeader>
 				<CardContent>
 					<Table>
 						<TableHeader>
 							<TableRow>
+								<TableHead className="w-8" />
 								<TableHead>Name</TableHead>
 								<TableHead>Status</TableHead>
 								<TableHead>Runs</TableHead>
@@ -251,25 +268,40 @@ function BulkRunsPage() {
 							</TableRow>
 						</TableHeader>
 						<TableBody>
-							{(bulkRuns.data ?? []).map((bulk) => (
-								<TableRow key={bulk.id}>
-									<TableCell>
-										<Link
-											to="/bulk-runs/$bulkRunId"
-											params={{ bulkRunId: bulk.id }}
-											className="font-medium hover:underline"
-										>
-											{bulk.name}
-										</Link>
-									</TableCell>
-									<TableCell className="capitalize">{bulk.status}</TableCell>
-									<TableCell>{bulk.totalRuns}</TableCell>
-									<TableCell>{new Date(bulk.createdAt).toLocaleString()}</TableCell>
-								</TableRow>
-							))}
+							{(bulkRuns.data ?? []).map((bulk) => {
+								const checked = selectedIds.includes(bulk.id);
+								return (
+									<TableRow key={bulk.id}>
+										<TableCell>
+											<Checkbox
+												checked={checked}
+												onCheckedChange={() =>
+													setSelectedIds((current) =>
+														current.includes(bulk.id)
+															? current.filter((id) => id !== bulk.id)
+															: [...current, bulk.id],
+													)
+												}
+											/>
+										</TableCell>
+										<TableCell>
+											<Link
+												to="/bulk-runs/$bulkRunId"
+												params={{ bulkRunId: bulk.id }}
+												className="font-medium hover:underline"
+											>
+												{bulk.name}
+											</Link>
+										</TableCell>
+										<TableCell className="capitalize">{bulk.status}</TableCell>
+										<TableCell>{bulk.totalRuns}</TableCell>
+										<TableCell>{new Date(bulk.createdAt).toLocaleString()}</TableCell>
+									</TableRow>
+								);
+							})}
 							{bulkRuns.data && bulkRuns.data.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={4} className="text-center text-muted-foreground">
+									<TableCell colSpan={5} className="text-center text-muted-foreground">
 										No bulk runs yet.
 									</TableCell>
 								</TableRow>
