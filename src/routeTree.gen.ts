@@ -10,11 +10,13 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SweepsIndexRouteImport } from './routes/sweeps/index'
 import { Route as ScenariosIndexRouteImport } from './routes/scenarios/index'
 import { Route as RunsIndexRouteImport } from './routes/runs/index'
 import { Route as ModelsIndexRouteImport } from './routes/models/index'
 import { Route as DefensesIndexRouteImport } from './routes/defenses/index'
 import { Route as BulkRunsIndexRouteImport } from './routes/bulk-runs/index'
+import { Route as SweepsSweepIdRouteImport } from './routes/sweeps/$sweepId'
 import { Route as ScenariosScenarioIdRouteImport } from './routes/scenarios/$scenarioId'
 import { Route as RunsRunIdRouteImport } from './routes/runs/$runId'
 import { Route as BulkRunsCompareRouteImport } from './routes/bulk-runs/compare'
@@ -23,6 +25,11 @@ import { Route as BulkRunsBulkRunIdRouteImport } from './routes/bulk-runs/$bulkR
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SweepsIndexRoute = SweepsIndexRouteImport.update({
+  id: '/sweeps/',
+  path: '/sweeps/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScenariosIndexRoute = ScenariosIndexRouteImport.update({
@@ -48,6 +55,11 @@ const DefensesIndexRoute = DefensesIndexRouteImport.update({
 const BulkRunsIndexRoute = BulkRunsIndexRouteImport.update({
   id: '/bulk-runs/',
   path: '/bulk-runs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SweepsSweepIdRoute = SweepsSweepIdRouteImport.update({
+  id: '/sweeps/$sweepId',
+  path: '/sweeps/$sweepId',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ScenariosScenarioIdRoute = ScenariosScenarioIdRouteImport.update({
@@ -77,11 +89,13 @@ export interface FileRoutesByFullPath {
   '/bulk-runs/compare': typeof BulkRunsCompareRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
+  '/sweeps/$sweepId': typeof SweepsSweepIdRoute
   '/bulk-runs/': typeof BulkRunsIndexRoute
   '/defenses/': typeof DefensesIndexRoute
   '/models/': typeof ModelsIndexRoute
   '/runs/': typeof RunsIndexRoute
   '/scenarios/': typeof ScenariosIndexRoute
+  '/sweeps/': typeof SweepsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -89,11 +103,13 @@ export interface FileRoutesByTo {
   '/bulk-runs/compare': typeof BulkRunsCompareRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
+  '/sweeps/$sweepId': typeof SweepsSweepIdRoute
   '/bulk-runs': typeof BulkRunsIndexRoute
   '/defenses': typeof DefensesIndexRoute
   '/models': typeof ModelsIndexRoute
   '/runs': typeof RunsIndexRoute
   '/scenarios': typeof ScenariosIndexRoute
+  '/sweeps': typeof SweepsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -102,11 +118,13 @@ export interface FileRoutesById {
   '/bulk-runs/compare': typeof BulkRunsCompareRoute
   '/runs/$runId': typeof RunsRunIdRoute
   '/scenarios/$scenarioId': typeof ScenariosScenarioIdRoute
+  '/sweeps/$sweepId': typeof SweepsSweepIdRoute
   '/bulk-runs/': typeof BulkRunsIndexRoute
   '/defenses/': typeof DefensesIndexRoute
   '/models/': typeof ModelsIndexRoute
   '/runs/': typeof RunsIndexRoute
   '/scenarios/': typeof ScenariosIndexRoute
+  '/sweeps/': typeof SweepsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -116,11 +134,13 @@ export interface FileRouteTypes {
     | '/bulk-runs/compare'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
+    | '/sweeps/$sweepId'
     | '/bulk-runs/'
     | '/defenses/'
     | '/models/'
     | '/runs/'
     | '/scenarios/'
+    | '/sweeps/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -128,11 +148,13 @@ export interface FileRouteTypes {
     | '/bulk-runs/compare'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
+    | '/sweeps/$sweepId'
     | '/bulk-runs'
     | '/defenses'
     | '/models'
     | '/runs'
     | '/scenarios'
+    | '/sweeps'
   id:
     | '__root__'
     | '/'
@@ -140,11 +162,13 @@ export interface FileRouteTypes {
     | '/bulk-runs/compare'
     | '/runs/$runId'
     | '/scenarios/$scenarioId'
+    | '/sweeps/$sweepId'
     | '/bulk-runs/'
     | '/defenses/'
     | '/models/'
     | '/runs/'
     | '/scenarios/'
+    | '/sweeps/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -153,11 +177,13 @@ export interface RootRouteChildren {
   BulkRunsCompareRoute: typeof BulkRunsCompareRoute
   RunsRunIdRoute: typeof RunsRunIdRoute
   ScenariosScenarioIdRoute: typeof ScenariosScenarioIdRoute
+  SweepsSweepIdRoute: typeof SweepsSweepIdRoute
   BulkRunsIndexRoute: typeof BulkRunsIndexRoute
   DefensesIndexRoute: typeof DefensesIndexRoute
   ModelsIndexRoute: typeof ModelsIndexRoute
   RunsIndexRoute: typeof RunsIndexRoute
   ScenariosIndexRoute: typeof ScenariosIndexRoute
+  SweepsIndexRoute: typeof SweepsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -167,6 +193,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sweeps/': {
+      id: '/sweeps/'
+      path: '/sweeps'
+      fullPath: '/sweeps/'
+      preLoaderRoute: typeof SweepsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scenarios/': {
@@ -202,6 +235,13 @@ declare module '@tanstack/react-router' {
       path: '/bulk-runs'
       fullPath: '/bulk-runs/'
       preLoaderRoute: typeof BulkRunsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sweeps/$sweepId': {
+      id: '/sweeps/$sweepId'
+      path: '/sweeps/$sweepId'
+      fullPath: '/sweeps/$sweepId'
+      preLoaderRoute: typeof SweepsSweepIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/scenarios/$scenarioId': {
@@ -241,11 +281,13 @@ const rootRouteChildren: RootRouteChildren = {
   BulkRunsCompareRoute: BulkRunsCompareRoute,
   RunsRunIdRoute: RunsRunIdRoute,
   ScenariosScenarioIdRoute: ScenariosScenarioIdRoute,
+  SweepsSweepIdRoute: SweepsSweepIdRoute,
   BulkRunsIndexRoute: BulkRunsIndexRoute,
   DefensesIndexRoute: DefensesIndexRoute,
   ModelsIndexRoute: ModelsIndexRoute,
   RunsIndexRoute: RunsIndexRoute,
   ScenariosIndexRoute: ScenariosIndexRoute,
+  SweepsIndexRoute: SweepsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

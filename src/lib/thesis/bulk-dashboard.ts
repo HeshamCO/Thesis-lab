@@ -1,5 +1,7 @@
 import type { AttemptRecord, BulkRunRecord, RunListItem } from "./schemas";
 
+export type CI = { low: number; high: number };
+
 export type BulkRunDashboard = {
 	totalRuns: number;
 	completedRuns: number;
@@ -8,11 +10,25 @@ export type BulkRunDashboard = {
 	failedRuns: number;
 	successfulRuns: number;
 	overallSuccessRate: number;
+	overallSuccessRateCi: CI;
 	meanUtility: number;
 	meanAttemptsPerRun: number;
 	totalAttempts: number;
 	attemptSuccessRate: number;
+	attemptSuccessRateCi: CI;
 	totalDurationMs: number;
+	meanTokensAttacker: number;
+	meanTokensBenign: number;
+	perScenarioAggregate: Array<{
+		scenarioName: string;
+		replicas: number;
+		successCount: number;
+		totalCount: number;
+		successRate: number;
+		ci: CI;
+	}>;
+	survivalCurve: Array<{ attemptNumber: number; survivors: number; newSuccesses: number; hazardRate: number; survivalRate: number }>;
+	byCategory: Array<{ category: string; count: number; successes: number; successRate: number; ci: CI }>;
 	perScenario: Array<{
 		runId: string;
 		scenarioName: string;
@@ -79,6 +95,7 @@ export function computeBulkRunDashboard(
 	}
 
 	const overallSuccessRate = completedRuns > 0 ? successfulRuns / completedRuns : 0;
+	const overallSuccessRateCi = wilsonCi(successfulRuns, completedRuns);
 	const meanUtility = utilityCount > 0 ? utilitySum / utilityCount : 0;
 	const meanAttemptsPerRun = utilityCount > 0 ? attemptsSum / utilityCount : 0;
 
@@ -86,13 +103,102 @@ export function computeBulkRunDashboard(
 	const totalAttempts = completedAttempts.length;
 	const attemptSuccesses = completedAttempts.filter((a) => a.success).length;
 	const attemptSuccessRate = totalAttempts > 0 ? attemptSuccesses / totalAttempts : 0;
+	const attemptSuccessRateCi = wilsonCi(attemptSuccesses, totalAttempts);
 	const totalDurationMs = completedAttempts.reduce((sum, a) => sum + a.totalDurationMs, 0);
+
+	const attemptTokenCount = completedAttempts.filter((a) => a.attackerTokensUsed > 0).length;
+	const meanTokensAttacker =
+		attemptTokenCount > 0
+			? completedAttempts.reduce((s, a) => s + a.attackerTokensUsed, 0) / attemptTokenCount
+			: 0;
+	const benignTokenCount = completedAttempts.filter((a) => a.benignTokensUsed > 0).length;
+	const meanTokensBenign =
+		benignTokenCount > 0
+			? completedAttempts.reduce((s, a) => s + a.benignTokensUsed, 0) / benignTokenCount
+			: 0;
 
 	const attemptsByRun = new Map<string, AttemptRecord[]>();
 	for (const attempt of completedAttempts) {
 		const list = attemptsByRun.get(attempt.runId) ?? [];
 		list.push(attempt);
 		attemptsByRun.set(attempt.runId, list);
+	}
+
+	// Category rollup over completed runs (derived from scenario name suffix).
+	const catAccum = new Map<string, { successes: number; count: number }>();
+	for (const run of runs) {
+		if (!run.summary) continue;
+		const cat = categorizeScenario(run.scenarioName);
+		const acc = catAccum.get(cat) ?? { successes: 0, count: 0 };
+		acc.count += 1;
+		if (run.summary.finalSuccess) acc.successes += 1;
+		catAccum.set(cat, acc);
+	}
+	const byCategory = Array.from(catAccum.entries())
+		.map(([category, { successes, count }]) => ({
+			category,
+			count,
+			successes,
+			successRate: count > 0 ? successes / count : 0,
+			ci: wilsonCi(successes, count),
+		}))
+		.sort((a, b) => b.count - a.count);
+
+	// Aggregate per-scenario across replicas.
+	const scenarioAccum = new Map<string, { successCount: number; totalCount: number }>();
+	for (const run of runs) {
+		if (!run.summary) continue;
+		const acc = scenarioAccum.get(run.scenarioName) ?? { successCount: 0, totalCount: 0 };
+		acc.totalCount += 1;
+		if (run.summary.finalSuccess) acc.successCount += 1;
+		scenarioAccum.set(run.scenarioName, acc);
+	}
+	const perScenarioAggregate = Array.from(scenarioAccum.entries())
+		.map(([scenarioName, { successCount, totalCount }]) => ({
+			scenarioName,
+			replicas: totalCount,
+			successCount,
+			totalCount,
+			successRate: totalCount > 0 ? successCount / totalCount : 0,
+			ci: wilsonCi(successCount, totalCount),
+		}))
+		.sort((a, b) => b.successRate - a.successRate);
+
+	// Survival curve: Kaplan-Meier-ish. Each run is one subject; right-censored at maxAttempts
+	// if it never succeeded.
+	const maxAttemptNumber = runs.reduce((m, r) => Math.max(m, r.maxAttempts), 0);
+	const survivalCurve: BulkRunDashboard["survivalCurve"] = [];
+	{
+		let atRisk = runs.filter((r) => r.summary !== null).length;
+		let survival = 1;
+		const successByPosition = new Map<number, number>();
+		const censorByPosition = new Map<number, number>();
+		for (const run of runs) {
+			if (!run.summary) continue;
+			if (run.summary.finalSuccess) {
+				const pos = run.summary.attemptsUsed || 1;
+				successByPosition.set(pos, (successByPosition.get(pos) ?? 0) + 1);
+			} else {
+				// censored at attemptsUsed (or maxAttempts if that's what it reached)
+				const pos = run.summary.attemptsUsed || run.maxAttempts;
+				censorByPosition.set(pos, (censorByPosition.get(pos) ?? 0) + 1);
+			}
+		}
+		for (let k = 1; k <= Math.max(maxAttemptNumber, 1); k += 1) {
+			const newSuccesses = successByPosition.get(k) ?? 0;
+			const censored = censorByPosition.get(k) ?? 0;
+			const hazard = atRisk > 0 ? newSuccesses / atRisk : 0;
+			survival *= 1 - hazard;
+			survivalCurve.push({
+				attemptNumber: k,
+				survivors: Math.max(0, atRisk - newSuccesses),
+				newSuccesses,
+				hazardRate: hazard,
+				survivalRate: survival,
+			});
+			atRisk -= newSuccesses + censored;
+			if (atRisk <= 0) break;
+		}
 	}
 
 	const perScenario = runs.map((run) => {
@@ -204,11 +310,18 @@ export function computeBulkRunDashboard(
 		failedRuns,
 		successfulRuns,
 		overallSuccessRate,
+		overallSuccessRateCi,
 		meanUtility,
 		meanAttemptsPerRun,
 		totalAttempts,
 		attemptSuccessRate,
+		attemptSuccessRateCi,
 		totalDurationMs,
+		meanTokensAttacker,
+		meanTokensBenign,
+		perScenarioAggregate,
+		survivalCurve,
+		byCategory,
 		perScenario,
 		byStrategy: byStrategy.map((entry) => ({
 			strategy: entry.key,
@@ -256,6 +369,32 @@ function groupBy(attempts: AttemptRecord[], keyFn: (attempt: AttemptRecord) => s
 	return Array.from(map.entries())
 		.map(([key, value]) => ({ key, ...value }))
 		.sort((a, b) => b.count - a.count);
+}
+
+const CATEGORY_KEYWORDS: Array<{ keyword: string; label: string }> = [
+	{ keyword: "exfiltration", label: "exfiltration" },
+	{ keyword: "direct_harm", label: "direct_harm" },
+	{ keyword: "fraud", label: "fraud" },
+	{ keyword: "misinformation", label: "misinformation" },
+	{ keyword: "tool_misuse", label: "tool_misuse" },
+	{ keyword: "output_manipulation", label: "output_manipulation" },
+];
+
+export function categorizeScenario(scenarioName: string): string {
+	const lower = scenarioName.toLowerCase();
+	for (const { keyword, label } of CATEGORY_KEYWORDS) {
+		if (lower.includes(keyword)) return label;
+	}
+	return "uncategorized";
+}
+
+export function wilsonCi(successes: number, total: number, z = 1.96): CI {
+	if (total <= 0) return { low: 0, high: 0 };
+	const p = successes / total;
+	const denom = 1 + (z * z) / total;
+	const centre = (p + (z * z) / (2 * total)) / denom;
+	const spread = (z * Math.sqrt((p * (1 - p)) / total + (z * z) / (4 * total * total))) / denom;
+	return { low: Math.max(0, centre - spread), high: Math.min(1, centre + spread) };
 }
 
 function groupByCount(attempts: AttemptRecord[], keyFn: (attempt: AttemptRecord) => string) {

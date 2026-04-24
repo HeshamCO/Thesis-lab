@@ -219,6 +219,65 @@ export function formatPercent(value: number) {
 	return `${(value * 100).toFixed(0)}%`;
 }
 
+type HeatmapProps = {
+	rows: string[];
+	cols: string[];
+	values: number[][]; // values[rowIdx][colIdx] in [0,1] or arbitrary; normalized 0..max
+	formatValue?: (v: number) => string;
+	emptyValue?: number | null;
+};
+
+export function Heatmap({ rows, cols, values, formatValue = (v) => v.toFixed(2), emptyValue = null }: HeatmapProps) {
+	if (rows.length === 0 || cols.length === 0) return <EmptyChart />;
+	const flat = values.flat().filter((v) => v !== null && v !== undefined && Number.isFinite(v));
+	const max = flat.length > 0 ? Math.max(...flat) : 1;
+	const min = flat.length > 0 ? Math.min(...flat) : 0;
+	const range = max - min || 1;
+	return (
+		<div className="overflow-auto">
+			<table className="border-collapse text-xs">
+				<thead>
+					<tr>
+						<th className="p-2 text-left text-muted-foreground" />
+						{cols.map((col) => (
+							<th key={col} className="p-2 text-left text-muted-foreground">
+								{col}
+							</th>
+						))}
+					</tr>
+				</thead>
+				<tbody>
+					{rows.map((row, rowIdx) => (
+						<tr key={row}>
+							<th className="p-2 text-right text-muted-foreground font-normal">{row}</th>
+							{cols.map((col, colIdx) => {
+								const raw = values[rowIdx]?.[colIdx];
+								const v = raw === undefined || raw === null ? emptyValue : raw;
+								const norm =
+									v === null || v === undefined || !Number.isFinite(v) ? null : (v - min) / range;
+								const bg =
+									norm === null
+										? "var(--muted)"
+										: `color-mix(in oklab, var(--chart-1) ${Math.round(norm * 100)}%, transparent)`;
+								return (
+									<td
+										key={col}
+										className="p-2 text-center font-mono"
+										style={{ background: bg }}
+										title={`${row} × ${col}: ${v === null ? "—" : formatValue(v)}`}
+									>
+										{v === null ? "—" : formatValue(v)}
+									</td>
+								);
+							})}
+						</tr>
+					))}
+				</tbody>
+			</table>
+		</div>
+	);
+}
+
 export function formatMs(value: number) {
 	if (value < 1000) return `${value.toFixed(0)}ms`;
 	return `${(value / 1000).toFixed(1)}s`;

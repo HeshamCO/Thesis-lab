@@ -14,12 +14,12 @@ export const evaluatorTypeSchema = z.enum([
 
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
-export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3"] as const;
+export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5"] as const;
 export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3"] as const;
-export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3"] as const;
-export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v3";
+export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4"] as const;
+export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v5";
 export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v3";
-export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v3";
+export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v4";
 
 export const ATTACK_EFFECTS = ["none", "partial", "full"] as const;
 export type AttackEffectLabel = (typeof ATTACK_EFFECTS)[number];
@@ -231,6 +231,8 @@ export type BulkRunConfig = {
 	benignTaskHasSafetyClause: boolean;
 	labelRetrievedDocuments: boolean;
 	structuredBenignOutput: boolean;
+	replicas: number;
+	shuffleSeed: number;
 };
 
 export type BulkRunRecord = {
@@ -242,6 +244,7 @@ export type BulkRunRecord = {
 	createdAt: string;
 	updatedAt: string;
 	completedAt: string | null;
+	groupId: string | null;
 };
 
 export const bulkRunInputSchema = z.object({
@@ -259,9 +262,39 @@ export const bulkRunInputSchema = z.object({
 	benignTaskHasSafetyClause: z.coerce.boolean().default(true),
 	labelRetrievedDocuments: z.coerce.boolean().default(false),
 	structuredBenignOutput: z.coerce.boolean().default(true),
+	replicas: z.coerce.number().int().min(1).max(20).default(1),
+	shuffleSeed: z.coerce.number().int().min(0).optional(),
 });
 
 export type BulkRunInput = z.infer<typeof bulkRunInputSchema>;
+
+export const sweepInputSchema = z.object({
+	name: z.string().min(1).max(200),
+	scenarioIds: z.array(z.string().min(1)).optional(),
+	base: bulkRunInputSchema,
+	factors: z
+		.object({
+			attackerModelId: z.array(z.string().min(1)).optional(),
+			benignModelId: z.array(z.string().min(1)).optional(),
+			judgeModelId: z.array(z.string().min(1)).optional(),
+			defenseConfigId: z.array(z.string().min(1)).optional(),
+			maxAttempts: z.array(z.coerce.number().int().min(1).max(50)).optional(),
+			attackerPromptVersion: z.array(z.enum(ATTACKER_PROMPT_VERSIONS)).optional(),
+			benignPromptVersion: z.array(z.enum(BENIGN_PROMPT_VERSIONS)).optional(),
+			judgePromptVersion: z.array(z.enum(JUDGE_PROMPT_VERSIONS)).optional(),
+		})
+		.default({}),
+});
+
+export type SweepInput = z.infer<typeof sweepInputSchema>;
+
+export type SweepRecord = {
+	id: string;
+	name: string;
+	createdAt: string;
+	bulkRunIds: string[];
+	factorCells: Array<Record<string, string | number>>;
+};
 
 export type RunListItem = {
 	id: string;
@@ -285,6 +318,7 @@ export type RunListItem = {
 	completedAt: string | null;
 	bulkRunId: string | null;
 	bulkRunIndex: number | null;
+	replicaIndex: number;
 };
 
 export type AttemptRecord = {
@@ -308,6 +342,8 @@ export type AttemptRecord = {
 	totalDurationMs: number;
 	defenseFilteredCount: number;
 	toolCallsCount: number;
+	attackerTokensUsed: number;
+	benignTokensUsed: number;
 	strategy: string;
 	intendedEffect: IntendedEffectLabel;
 	expectedTrigger: ExpectedTriggerLabel;

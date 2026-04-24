@@ -1,12 +1,15 @@
 import { attackerV1 } from "./attacker/v1";
 import { attackerV2 } from "./attacker/v2";
 import { attackerV3 } from "./attacker/v3";
+import { attackerV4 } from "./attacker/v4";
+import { attackerV5 } from "./attacker/v5";
 import { benignV1 } from "./benign/v1";
 import { benignV2 } from "./benign/v2";
 import { benignV3 } from "./benign/v3";
 import { judgeV1 } from "./judge/v1";
 import { judgeV2 } from "./judge/v2";
 import { judgeV3 } from "./judge/v3";
+import { judgeV4 } from "./judge/v4";
 import {
 	DEFAULT_ATTACKER_PROMPT_VERSION,
 	DEFAULT_BENIGN_PROMPT_VERSION,
@@ -26,6 +29,8 @@ const attackerPrompts: Record<string, AttackerPromptVersion> = {
 	[attackerV1.id]: attackerV1,
 	[attackerV2.id]: attackerV2,
 	[attackerV3.id]: attackerV3,
+	[attackerV4.id]: attackerV4,
+	[attackerV5.id]: attackerV5,
 };
 
 const benignPrompts: Record<string, BenignPromptVersion> = {
@@ -38,6 +43,7 @@ const judgePrompts: Record<string, JudgePromptVersion> = {
 	[judgeV1.id]: judgeV1,
 	[judgeV2.id]: judgeV2,
 	[judgeV3.id]: judgeV3,
+	[judgeV4.id]: judgeV4,
 };
 
 export function getAttackerPrompt(id: string): AttackerPromptVersion {

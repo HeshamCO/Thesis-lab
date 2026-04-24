@@ -1,7 +1,10 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { DownloadIcon, RefreshCwIcon } from "lucide-react";
+import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
+import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Progress } from "#/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
@@ -20,6 +23,7 @@ export const Route = createFileRoute("/bulk-runs/$bulkRunId")({ component: BulkR
 
 function BulkRunDashboard() {
 	const { bulkRunId } = Route.useParams();
+	const queryClient = useQueryClient();
 	const query = useQuery({
 		queryKey: queryKeys.bulkRun(bulkRunId),
 		queryFn: () => api.bulkRun(bulkRunId),
@@ -27,6 +31,14 @@ function BulkRunDashboard() {
 			const status = q.state.data?.bulkRun.status;
 			return status === "running" || status === "queued" ? 2000 : false;
 		},
+	});
+	const resumeFailed = useMutation({
+		mutationFn: () => api.resumeFailedInBulk(bulkRunId),
+		onSuccess: ({ resumed }) => {
+			toast.success(`Re-queued ${resumed} failed run${resumed === 1 ? "" : "s"}.`);
+			queryClient.invalidateQueries({ queryKey: queryKeys.bulkRun(bulkRunId) });
+		},
+		onError: (error) => toast.error(error.message),
 	});
 
 	if (query.isLoading) return <p className="p-4">Loading…</p>;
@@ -115,12 +127,53 @@ function BulkRunDashboard() {
 		{ phase: "total", ms: Math.round(dashboard.durationByPhase.meanTotalMs) },
 	];
 
+	const survivalData = dashboard.survivalCurve.map((p) => ({
+		position: `#${p.attemptNumber}`,
+		survivalPct: Number((p.survivalRate * 100).toFixed(1)),
+		hazardPct: Number((p.hazardRate * 100).toFixed(1)),
+	}));
+
+	const categoryData = dashboard.byCategory.map((row) => ({
+		category: row.category,
+		attempts: row.count,
+		successRate: Number((row.successRate * 100).toFixed(1)),
+	}));
+
+	const tokensData = [
+		{ role: "attacker", tokens: Math.round(dashboard.meanTokensAttacker) },
+		{ role: "benign", tokens: Math.round(dashboard.meanTokensBenign) },
+	];
+
+	const failedRuns = runs.filter((run) => run.status === "failed");
+
 	return (
 		<>
 			<PageHeading
 				title={bulkRun.name}
-				description={`Status: ${bulkRun.status} · ${dashboard.totalRuns} scenarios · created ${new Date(bulkRun.createdAt).toLocaleString()}`}
+				description={`Status: ${bulkRun.status} · ${dashboard.totalRuns} scenarios · replicas=${bulkRun.config.replicas ?? 1} · seed=${bulkRun.config.shuffleSeed ?? "?"} · created ${new Date(bulkRun.createdAt).toLocaleString()}`}
 			/>
+
+			<div className="flex flex-wrap gap-2">
+				<Button
+					asChild
+					size="sm"
+					variant="outline"
+				>
+					<a href={api.bulkExportCsvUrl(bulkRun.id)} download>
+						<DownloadIcon data-icon="inline-start" />
+						Export CSV
+					</a>
+				</Button>
+				<Button
+					size="sm"
+					variant="outline"
+					disabled={failedRuns.length === 0 || resumeFailed.isPending}
+					onClick={() => resumeFailed.mutate()}
+				>
+					<RefreshCwIcon data-icon="inline-start" />
+					Resume failed ({failedRuns.length})
+				</Button>
+			</div>
 
 			<Card>
 				<CardHeader>
@@ -138,7 +191,7 @@ function BulkRunDashboard() {
 				</CardContent>
 			</Card>
 
-			<div className="grid gap-4 md:grid-cols-3">
+			<div className="grid gap-4 md:grid-cols-4">
 				<Card>
 					<CardHeader>
 						<CardTitle>Run-level success rate</CardTitle>
@@ -147,6 +200,10 @@ function BulkRunDashboard() {
 						<div className="text-3xl font-semibold">
 							{(dashboard.overallSuccessRate * 100).toFixed(1)}%
 						</div>
+						<p className="text-xs text-muted-foreground">
+							95% CI [{(dashboard.overallSuccessRateCi.low * 100).toFixed(0)}%–
+							{(dashboard.overallSuccessRateCi.high * 100).toFixed(0)}%]
+						</p>
 						<p className="text-sm text-muted-foreground">
 							{dashboard.successfulRuns}/{dashboard.completedRuns} completed runs succeeded
 						</p>
@@ -160,6 +217,10 @@ function BulkRunDashboard() {
 						<div className="text-3xl font-semibold">
 							{(dashboard.attemptSuccessRate * 100).toFixed(1)}%
 						</div>
+						<p className="text-xs text-muted-foreground">
+							95% CI [{(dashboard.attemptSuccessRateCi.low * 100).toFixed(0)}%–
+							{(dashboard.attemptSuccessRateCi.high * 100).toFixed(0)}%]
+						</p>
 						<p className="text-sm text-muted-foreground">
 							{dashboard.totalAttempts} attempts total
 						</p>
@@ -173,6 +234,20 @@ function BulkRunDashboard() {
 						<div className="text-3xl font-semibold">{dashboard.meanUtility.toFixed(2)}</div>
 						<p className="text-sm text-muted-foreground">
 							Mean attempts per run: {dashboard.meanAttemptsPerRun.toFixed(1)}
+						</p>
+					</CardContent>
+				</Card>
+				<Card>
+					<CardHeader>
+						<CardTitle>Mean tokens</CardTitle>
+					</CardHeader>
+					<CardContent>
+						<div className="text-3xl font-semibold">
+							{Math.round(dashboard.meanTokensAttacker + dashboard.meanTokensBenign).toLocaleString()}
+						</div>
+						<p className="text-sm text-muted-foreground">
+							Att {Math.round(dashboard.meanTokensAttacker).toLocaleString()} · Ben{" "}
+							{Math.round(dashboard.meanTokensBenign).toLocaleString()}
 						</p>
 					</CardContent>
 				</Card>
@@ -254,6 +329,43 @@ function BulkRunDashboard() {
 						xKey="phase"
 						bars={[{ key: "ms", label: "Mean ms", colorIndex: 3 }]}
 						yTickFormatter={(v) => formatMs(v)}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Survival curve"
+					description="P(attack hasn't succeeded yet) after N attempts — steep drops mean easy wins."
+				>
+					<SimpleLine
+						data={survivalData}
+						xKey="position"
+						lines={[
+							{ key: "survivalPct", label: "Survival %" },
+							{ key: "hazardPct", label: "Hazard %", colorIndex: 3 },
+						]}
+						yTickFormatter={(v) => `${v}%`}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="By scenario category"
+					description="ASR grouped by exfiltration / direct_harm / fraud / misinformation."
+				>
+					<SimpleBar
+						data={categoryData}
+						xKey="category"
+						bars={[
+							{ key: "attempts", label: "Runs" },
+							{ key: "successRate", label: "Success rate %", colorIndex: 2 },
+						]}
+					/>
+				</ChartCard>
+				<ChartCard
+					title="Token usage"
+					description="Mean tokens per attempt per role (attacker vs benign)."
+				>
+					<SimpleBar
+						data={tokensData}
+						xKey="role"
+						bars={[{ key: "tokens", label: "Mean tokens", colorIndex: 4 }]}
 					/>
 				</ChartCard>
 
@@ -388,6 +500,7 @@ function BulkRunDashboard() {
 							<TableRow>
 								<TableHead>#</TableHead>
 								<TableHead>Scenario</TableHead>
+								<TableHead>Replica</TableHead>
 								<TableHead>Status</TableHead>
 								<TableHead>Created</TableHead>
 							</TableRow>
@@ -405,8 +518,16 @@ function BulkRunDashboard() {
 											{run.scenarioName}
 										</Link>
 									</TableCell>
+									<TableCell className="font-mono text-xs">{run.replicaIndex}</TableCell>
 									<TableCell>
-										<StatusBadge status={run.status} />
+										<div className="flex flex-col gap-1">
+											<StatusBadge status={run.status} />
+											{run.status === "failed" && run.error ? (
+												<span className="text-xs text-red-600 dark:text-red-400">
+													{run.error}
+												</span>
+											) : null}
+										</div>
 									</TableCell>
 									<TableCell>{new Date(run.createdAt).toLocaleString()}</TableCell>
 								</TableRow>

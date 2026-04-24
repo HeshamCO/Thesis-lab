@@ -90,6 +90,8 @@ function sampleRunDetail(): RunDetail {
 		totalDurationMs: 900,
 		defenseFilteredCount: 1,
 		toolCallsCount: 0,
+		attackerTokensUsed: 0,
+		benignTokensUsed: 0,
 		strategy: "",
 		intendedEffect: "unspecified",
 		expectedTrigger: "unspecified",
@@ -234,6 +236,7 @@ function sampleRunDetail(): RunDetail {
 		updatedAt: attempt.createdAt,
 		completedAt: attempt.completedAt,
 		bulkRunId: null,
+		replicaIndex: 0,
 		bulkRunIndex: null,
 		scenarioSnapshot: {
 			id: "scenario-1",

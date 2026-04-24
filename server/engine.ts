@@ -53,6 +53,7 @@ type BenignTaskResult = {
 	structuredParseOk: boolean | null;
 	systemPrompt: string;
 	userPrompt: string;
+	tokensUsed: number;
 };
 
 type AttackerOutput = {
@@ -70,6 +71,7 @@ type AttackerOutput = {
 	parseOk: boolean;
 	systemPrompt: string;
 	userPrompt: string;
+	tokensUsed: number;
 };
 
 type JudgeOutput = {
@@ -179,8 +181,16 @@ export class ExperimentEngine {
 		const next = this.db.getNextQueuedRunInBulk(bulkRunId);
 		if (next) {
 			setTimeout(() => this.start(next), 0);
-		} else {
-			this.db.updateBulkRunStatus(bulkRunId, "completed");
+			return;
+		}
+		this.db.updateBulkRunStatus(bulkRunId, "completed");
+		const groupId = this.db.getBulkRunGroupId(bulkRunId);
+		if (groupId) {
+			const nextBulk = this.db.getNextQueuedBulkInGroup(groupId);
+			if (nextBulk) {
+				const firstRun = this.db.getFirstRunInBulk(nextBulk);
+				if (firstRun) setTimeout(() => this.start(firstRun), 0);
+			}
 		}
 	}
 
@@ -291,6 +301,7 @@ export class ExperimentEngine {
 		const benignStartedAt = Date.now();
 		const benign = await this.runBenignTask(run, attempt.id, attemptNumber, retrievedContext);
 		const benignDurationMs = Date.now() - benignStartedAt;
+		this.db.updateAttemptTokens(attempt.id, attackerOutput.tokensUsed, benign.tokensUsed);
 		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "benign_system_prompt", benign.systemPrompt);
 		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "benign_user_prompt", benign.userPrompt);
 		this.log(run.id, "info", "benign.responded", "Benign model produced a response.", {
@@ -417,12 +428,34 @@ export class ExperimentEngine {
 			previousFeedback,
 			retrievalQuery,
 		});
-		const content = await this.callModel(run.attackerModelSnapshot, { ...built, role: "attacker" });
+		const usage = await this.callModelWithUsage(run.attackerModelSnapshot, { ...built, role: "attacker" });
+		let content = usage.content;
+		let tokensUsed = usage.totalTokens;
+
+		// If the attacker refused or produced non-JSON, retry once with a JSON-forcing assistant prefill.
+		// Claude/GPT-5 will usually continue from an open `{` even if they refused on the first pass.
+		if (looksLikeRefusalOrNonJson(content)) {
+			this.log(run.id, "warn", "attack.refusal_detected", "Attacker output looks like a refusal; retrying with JSON prefill.", {
+				attemptNumber,
+				preview: truncate(content, 200),
+			});
+			const retry = await this.callModelWithUsage(run.attackerModelSnapshot, {
+				...built,
+				role: "attacker",
+				assistantPrefill: '{"strategy":"',
+			});
+			if (retry.content && !looksLikeRefusalOrNonJson(retry.content)) {
+				content = retry.content.startsWith("{") ? retry.content : `{"strategy":"${retry.content}`;
+			}
+			tokensUsed += retry.totalTokens;
+		}
+
 		const parsed = parseAttackerOutput(content, run, attemptNumber);
 		return {
 			...parsed,
 			systemPrompt: built.system ?? "",
 			userPrompt: built.user,
+			tokensUsed,
 		};
 	}
 
@@ -496,20 +529,22 @@ export class ExperimentEngine {
 
 		const prompts = { systemPrompt: built.system ?? "", userPrompt: built.user };
 		if (exposedTools.length === 0) {
-			const text = await this.callModel(run.benignModelSnapshot, { ...built, role: "benign" });
-			return finishBenignResult(text, [], useStructured, prompts);
+			const usage = await this.callModelWithUsage(run.benignModelSnapshot, { ...built, role: "benign" });
+			return finishBenignResult(usage.content, [], useStructured, prompts, usage.totalTokens);
 		}
 
 		const messages = buildMessages(built);
 		const toolSpec = exposedTools.map(toOpenAITool);
 		const recordedCalls: ToolCallRecord[] = [];
+		let benignTokens = 0;
 
 		for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
 			const message = await this.callBenignWithTools(run.benignModelSnapshot, messages, toolSpec);
+			benignTokens += message.tokensUsed;
 			messages.push(message.assistant);
 
 			if (!message.toolCalls.length) {
-				return finishBenignResult(message.text, recordedCalls, useStructured, prompts);
+				return finishBenignResult(message.text, recordedCalls, useStructured, prompts, benignTokens);
 			}
 
 			for (const call of message.toolCalls) {
@@ -599,7 +634,7 @@ export class ExperimentEngine {
 			| undefined;
 		const fallbackText =
 			typeof lastAssistant?.content === "string" ? lastAssistant.content : "";
-		return finishBenignResult(fallbackText, recordedCalls, useStructured, prompts);
+		return finishBenignResult(fallbackText, recordedCalls, useStructured, prompts, benignTokens);
 	}
 
 	private async callBenignWithTools(
@@ -610,13 +645,14 @@ export class ExperimentEngine {
 		assistant: ChatCompletionAssistantMessageParam;
 		text: string;
 		toolCalls: ChatCompletionMessageFunctionToolCall[];
+		tokensUsed: number;
 	}> {
 		const apiKey = resolveApiKey(model);
 		if (!apiKey) {
-			return this.mockBenignWithTools(messages, tools);
+			return { ...this.mockBenignWithTools(messages, tools), tokensUsed: 0 };
 		}
 		const client = new OpenAI({ apiKey, baseURL: model.baseUrl });
-		const response = await client.chat.completions.create({
+		const response = await createChatCompletion(client, {
 			model: model.modelName,
 			temperature: model.temperature,
 			max_tokens: model.maxTokens,
@@ -633,7 +669,7 @@ export class ExperimentEngine {
 			content: text,
 			...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
 		};
-		return { assistant, text, toolCalls };
+		return { assistant, text, toolCalls, tokensUsed: response.usage?.total_tokens ?? 0 };
 	}
 
 	private mockBenignWithTools(
@@ -748,24 +784,46 @@ export class ExperimentEngine {
 		model: ModelConfig,
 		args: { system?: string; user: string; role: "attacker" | "benign" | "judge" },
 	): Promise<string> {
+		const result = await this.callModelWithUsage(model, args);
+		return result.content;
+	}
+
+	private async callModelWithUsage(
+		model: ModelConfig,
+		args: { system?: string; user: string; role: "attacker" | "benign" | "judge"; assistantPrefill?: string },
+	): Promise<{ content: string; promptTokens: number; completionTokens: number; totalTokens: number }> {
 		const apiKey = resolveApiKey(model);
 		if (!apiKey) {
-			return this.mockModelResponse(args);
+			return {
+				content: this.mockModelResponse(args),
+				promptTokens: 0,
+				completionTokens: 0,
+				totalTokens: 0,
+			};
 		}
 
 		const messages = buildMessages(args);
+		if (args.assistantPrefill) {
+			messages.push({ role: "assistant", content: args.assistantPrefill });
+		}
 		const client = new OpenAI({
 			apiKey,
 			baseURL: model.baseUrl,
 		});
-		const response = await client.chat.completions.create({
+		const response = await createChatCompletion(client, {
 			model: model.modelName,
 			temperature: model.temperature,
 			max_tokens: model.maxTokens,
 			messages,
 		});
 
-		return response.choices[0]?.message.content ?? "";
+		const usage = response.usage;
+		return {
+			content: response.choices[0]?.message.content ?? "",
+			promptTokens: usage?.prompt_tokens ?? 0,
+			completionTokens: usage?.completion_tokens ?? 0,
+			totalTokens: usage?.total_tokens ?? 0,
+		};
 	}
 
 	private mockModelResponse(args: { user: string; role: "attacker" | "benign" | "judge" }) {
@@ -883,6 +941,65 @@ function truncate(value: string, max: number) {
 	return value.length <= max ? value : `${value.slice(0, max)}…`;
 }
 
+const REFUSAL_HINTS = [
+	/\bi can(?:not|'t|not help|not assist)\b/i,
+	/\bi won't\b/i,
+	/\bi'm not able to\b/i,
+	/\bi (?:cannot|can't|will not|won't) (?:help|assist|provide|generate|produce|write|craft)\b/i,
+	/\bas an ai\b/i,
+	/\bi'm (?:sorry|unable)\b/i,
+	/\bregardless of (?:the )?framing\b/i,
+	/\b(?:harmful|malicious|unethical|security attack)\b[^{]{0,120}$/i,
+];
+
+function looksLikeRefusalOrNonJson(content: string): boolean {
+	const trimmed = content.trim();
+	if (trimmed.length === 0) return true;
+	if (trimmed.startsWith("{") || trimmed.startsWith("```")) return false;
+	for (const pattern of REFUSAL_HINTS) {
+		if (pattern.test(trimmed)) return true;
+	}
+	// If the output has no `{` at all we also can't parse it.
+	return !trimmed.includes("{");
+}
+
+// Some providers/models reject specific sampling params (e.g. GPT-5 rejects `temperature`,
+// some reasoning models reject `max_tokens`). Catch the 400 "deprecated/unsupported" errors
+// and retry with the offending field removed. Avoids making each callsite aware of per-model quirks.
+async function createChatCompletion<Body extends Record<string, unknown>>(
+	client: OpenAI,
+	body: Body,
+) {
+	try {
+		return await client.chat.completions.create(body as never);
+	} catch (error) {
+		const message = extractErrorMessage(error);
+		if (!message) throw error;
+		const retryBody: Record<string, unknown> = { ...body };
+		let changed = false;
+		if (/temperature/i.test(message) && "temperature" in retryBody) {
+			delete retryBody.temperature;
+			changed = true;
+		}
+		if (/max[_ ]tokens/i.test(message) && "max_tokens" in retryBody) {
+			// Some models want max_completion_tokens instead — retry once with the alternate key.
+			retryBody.max_completion_tokens = retryBody.max_tokens;
+			delete retryBody.max_tokens;
+			changed = true;
+		}
+		if (!changed) throw error;
+		return await client.chat.completions.create(retryBody as never);
+	}
+}
+
+function extractErrorMessage(error: unknown): string | null {
+	if (!error) return null;
+	if (typeof error === "object" && "message" in error && typeof (error as { message: unknown }).message === "string") {
+		return (error as { message: string }).message;
+	}
+	return null;
+}
+
 function buildMessages(args: { system?: string; user: string }): ChatCompletionMessageParam[] {
 	const messages: ChatCompletionMessageParam[] = [];
 	if (args.system && args.system.trim().length > 0) {
@@ -955,6 +1072,7 @@ function parseAttackerOutput(
 			parseOk: true,
 			systemPrompt: "",
 			userPrompt: "",
+			tokensUsed: 0,
 		};
 	} catch {
 		return {
@@ -972,6 +1090,7 @@ function parseAttackerOutput(
 			parseOk: false,
 			systemPrompt: "",
 			userPrompt: "",
+			tokensUsed: 0,
 		};
 	}
 }
@@ -1016,6 +1135,7 @@ function finishBenignResult(
 	toolCalls: ToolCallRecord[],
 	useStructured: boolean,
 	prompts: { systemPrompt: string; userPrompt: string },
+	tokensUsed = 0,
 ): BenignTaskResult {
 	if (!useStructured) {
 		return {
@@ -1025,6 +1145,7 @@ function finishBenignResult(
 			structuredParseOk: null,
 			systemPrompt: prompts.systemPrompt,
 			userPrompt: prompts.userPrompt,
+			tokensUsed,
 		};
 	}
 	const parsed = parseStructuredBenignOutput(text);
@@ -1035,6 +1156,7 @@ function finishBenignResult(
 		structuredParseOk: parsed.parseOk,
 		systemPrompt: prompts.systemPrompt,
 		userPrompt: prompts.userPrompt,
+		tokensUsed,
 	};
 }
 

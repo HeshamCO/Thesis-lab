@@ -15,6 +15,8 @@ import type {
 	ScenarioInput,
 	StartRunInput,
 	StepResultRecord,
+	SweepInput,
+	SweepRecord,
 	ToolCallRecord,
 } from "./schemas";
 import type { BulkRunDashboard } from "./bulk-dashboard";
@@ -124,4 +126,23 @@ export const api = {
 			method: "POST",
 			body: JSON.stringify(data),
 		}),
+	resumeFailedInBulk: (bulkRunId: string) =>
+		request<{ resumed: number }>(`/api/bulk-runs/${bulkRunId}/resume-failed`, { method: "POST" }),
+	bulkExportCsvUrl: (bulkRunId: string) => `/api/bulk-runs/${bulkRunId}/export.csv`,
+	sweeps: () => request<Array<{ id: string; name: string; createdAt: string }>>("/api/sweeps"),
+	sweep: (id: string) =>
+		request<{
+			sweep: { id: string; name: string; createdAt: string; factorCells: Array<Record<string, string | number>> };
+			cells: Array<{ bulkRun: BulkRunRecord; dashboard: BulkRunDashboard }>;
+		}>(`/api/sweeps/${id}`),
+	createSweep: (data: SweepInput) =>
+		request<{ sweep: SweepRecord; bulks: Array<{ id: string; name: string }> }>("/api/sweeps", {
+			method: "POST",
+			body: JSON.stringify(data),
+		}),
+	stopSweep: (id: string) =>
+		request<{ cancelledRuns: number; pausedRuns: number; affectedBulks: number }>(
+			`/api/sweeps/${id}/stop`,
+			{ method: "POST" },
+		),
 };

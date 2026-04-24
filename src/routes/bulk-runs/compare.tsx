@@ -112,6 +112,8 @@ function BulkRunCompare() {
 
 	const scenarioDelta = buildScenarioDelta(payloads);
 	const runLines = labels.map((label, i) => ({ key: `run${i}`, label, colorIndex: i }));
+	const pairedSummary = payloads.length === 2 ? buildPairedSummary(payloads) : null;
+	const differingFields = findDifferingConfigFields(payloads);
 
 	return (
 		<>
@@ -126,8 +128,57 @@ function BulkRunCompare() {
 				</CardHeader>
 				<CardContent>
 					<ConfigDiffTable payloads={payloads} />
+					{differingFields.length === 0 ? (
+						<p className="mt-3 text-sm text-muted-foreground">
+							All compared fields are identical — deltas reflect only random variance across runs.
+						</p>
+					) : (
+						<p className="mt-3 text-sm text-muted-foreground">
+							Varying factor{differingFields.length > 1 ? "s" : ""}:{" "}
+							<span className="font-mono">{differingFields.join(", ")}</span>
+						</p>
+					)}
 				</CardContent>
 			</Card>
+
+			{pairedSummary ? (
+				<Card>
+					<CardHeader>
+						<CardTitle>Paired summary (McNemar-style)</CardTitle>
+					</CardHeader>
+					<CardContent className="grid gap-3 md:grid-cols-4 text-sm">
+						<div>
+							<p className="text-xs text-muted-foreground">Both succeeded</p>
+							<p className="text-2xl font-semibold">{pairedSummary.bothSucceeded}</p>
+						</div>
+						<div>
+							<p className="text-xs text-muted-foreground">Both failed</p>
+							<p className="text-2xl font-semibold">{pairedSummary.bothFailed}</p>
+						</div>
+						<div>
+							<p className="text-xs text-muted-foreground">Only A succeeded</p>
+							<p className="text-2xl font-semibold">{pairedSummary.onlyASucceeded}</p>
+						</div>
+						<div>
+							<p className="text-xs text-muted-foreground">Only B succeeded</p>
+							<p className="text-2xl font-semibold">{pairedSummary.onlyBSucceeded}</p>
+						</div>
+						<div className="md:col-span-4">
+							<p className="text-xs text-muted-foreground">
+								McNemar p-value (two-sided exact binomial)
+							</p>
+							<p className="text-lg font-mono">
+								p = {pairedSummary.pValue.toFixed(4)}{" "}
+								{pairedSummary.pValue < 0.05 ? (
+									<span className="text-emerald-600 dark:text-emerald-400">· significant at 0.05</span>
+								) : (
+									<span className="text-muted-foreground">· not significant at 0.05</span>
+								)}
+							</p>
+						</div>
+					</CardContent>
+				</Card>
+			) : null}
 
 			<ChartCard
 				title="Headline metrics"
@@ -311,6 +362,75 @@ function mergeCategorical(seriesList: Array<Array<{ key: string; value: number }
 		});
 		return entry;
 	});
+}
+
+function findDifferingConfigFields(payloads: BulkPayload[]): string[] {
+	const keys: Array<keyof BulkRunConfig> = [
+		"attackerModelId",
+		"benignModelId",
+		"judgeModelId",
+		"defenseConfigId",
+		"maxAttempts",
+		"attackerPromptVersion",
+		"benignPromptVersion",
+		"judgePromptVersion",
+		"benignTaskHasSafetyClause",
+		"labelRetrievedDocuments",
+		"structuredBenignOutput",
+		"replicas",
+	];
+	const differing: string[] = [];
+	for (const key of keys) {
+		const values = payloads.map((p) => String(p.bulkRun.config[key] ?? ""));
+		if (new Set(values).size > 1) differing.push(String(key));
+	}
+	return differing;
+}
+
+function buildPairedSummary(payloads: BulkPayload[]) {
+	const [a, b] = payloads;
+	const aByScenario = new Map(a.dashboard.perScenario.map((row) => [row.scenarioName, row.finalSuccess]));
+	const bByScenario = new Map(b.dashboard.perScenario.map((row) => [row.scenarioName, row.finalSuccess]));
+	let bothSucceeded = 0;
+	let bothFailed = 0;
+	let onlyASucceeded = 0;
+	let onlyBSucceeded = 0;
+	const scenarios = new Set<string>([...aByScenario.keys(), ...bByScenario.keys()]);
+	for (const scenario of scenarios) {
+		const sa = aByScenario.get(scenario);
+		const sb = bByScenario.get(scenario);
+		if (sa === null || sa === undefined || sb === null || sb === undefined) continue;
+		if (sa && sb) bothSucceeded += 1;
+		else if (!sa && !sb) bothFailed += 1;
+		else if (sa && !sb) onlyASucceeded += 1;
+		else onlyBSucceeded += 1;
+	}
+	// Exact McNemar test: two-sided binomial with n = onlyA + onlyB, k = min(onlyA, onlyB), p = 0.5.
+	const n = onlyASucceeded + onlyBSucceeded;
+	const k = Math.min(onlyASucceeded, onlyBSucceeded);
+	const pValue = n === 0 ? 1 : exactBinomialTwoSided(k, n);
+	return { bothSucceeded, bothFailed, onlyASucceeded, onlyBSucceeded, pValue };
+}
+
+function exactBinomialTwoSided(k: number, n: number): number {
+	let tail = 0;
+	for (let i = 0; i <= k; i += 1) tail += binomialProbability(i, n, 0.5);
+	return Math.min(1, tail * 2);
+}
+
+function binomialProbability(k: number, n: number, p: number): number {
+	return binomialCoefficient(n, k) * p ** k * (1 - p) ** (n - k);
+}
+
+function binomialCoefficient(n: number, k: number): number {
+	if (k < 0 || k > n) return 0;
+	let num = 1;
+	let den = 1;
+	for (let i = 1; i <= k; i += 1) {
+		num *= n - (i - 1);
+		den *= i;
+	}
+	return num / den;
 }
 
 function buildScenarioDelta(payloads: BulkPayload[]) {

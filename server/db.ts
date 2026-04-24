@@ -242,6 +242,13 @@ export class ThesisDb {
 				completed_at TEXT
 			);
 
+			CREATE TABLE IF NOT EXISTS sweeps (
+				id TEXT PRIMARY KEY,
+				name TEXT NOT NULL,
+				factor_cells TEXT NOT NULL DEFAULT '[]',
+				created_at TEXT NOT NULL
+			);
+
 			CREATE TABLE IF NOT EXISTS runs (
 				id TEXT PRIMARY KEY,
 				status TEXT NOT NULL,
@@ -367,6 +374,8 @@ export class ThesisDb {
 		this.addColumnIfMissing('attempts', 'total_duration_ms', 'INTEGER NOT NULL DEFAULT 0');
 		this.addColumnIfMissing('attempts', 'defense_filtered_count', 'INTEGER NOT NULL DEFAULT 0');
 		this.addColumnIfMissing('attempts', 'tool_calls_count', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('attempts', 'attacker_tokens_used', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('attempts', 'benign_tokens_used', 'INTEGER NOT NULL DEFAULT 0');
 		this.addColumnIfMissing('step_results', 'raw_judge_output', "TEXT NOT NULL DEFAULT ''");
 		this.addColumnIfMissing('step_results', 'raw_judge_parse_ok', 'INTEGER NOT NULL DEFAULT 1');
 		this.addColumnIfMissing('defense_configs', 'allowed_tools', "TEXT NOT NULL DEFAULT '[]'");
@@ -397,6 +406,8 @@ export class ThesisDb {
 		this.addColumnIfMissing('attempts', 'benign_structured_parse_ok', 'INTEGER');
 		this.addColumnIfMissing('runs', 'bulk_run_id', 'TEXT');
 		this.addColumnIfMissing('runs', 'bulk_run_index', 'INTEGER');
+		this.addColumnIfMissing('runs', 'replica_index', 'INTEGER NOT NULL DEFAULT 0');
+		this.addColumnIfMissing('bulk_runs', 'bulk_run_group_id', 'TEXT');
 	}
 
 	private addColumnIfMissing(table: string, column: string, definition: string) {
@@ -456,16 +467,78 @@ export class ThesisDb {
 		name: string;
 		config: BulkRunConfig;
 		totalRuns: number;
+		groupId?: string | null;
 	}): BulkRunRecord {
 		const bulkId = id('bulk');
 		const timestamp = now();
 		this.db
 			.prepare(
-				`INSERT INTO bulk_runs (id, name, status, total_runs, config, created_at, updated_at, completed_at)
-				VALUES (?, ?, 'queued', ?, ?, ?, ?, NULL)`,
+				`INSERT INTO bulk_runs (id, name, status, total_runs, config, created_at, updated_at, completed_at, bulk_run_group_id)
+				VALUES (?, ?, 'queued', ?, ?, ?, ?, NULL, ?)`,
 			)
-			.run(bulkId, input.name, input.totalRuns, stringify(input.config), timestamp, timestamp);
+			.run(bulkId, input.name, input.totalRuns, stringify(input.config), timestamp, timestamp, input.groupId ?? null);
 		return this.getBulkRun(bulkId)!;
+	}
+
+	createSweep(input: { name: string; factorCells: Array<Record<string, string | number>> }): { id: string } {
+		const sweepId = id('sweep');
+		this.db
+			.prepare('INSERT INTO sweeps (id, name, factor_cells, created_at) VALUES (?, ?, ?, ?)')
+			.run(sweepId, input.name, stringify(input.factorCells), now());
+		return { id: sweepId };
+	}
+
+	listSweeps(): Array<{ id: string; name: string; createdAt: string }> {
+		return (
+			this.db.prepare('SELECT id, name, created_at FROM sweeps ORDER BY created_at DESC').all() as Array<SqlRow>
+		).map((row) => ({
+			id: String(row.id),
+			name: String(row.name),
+			createdAt: String(row.created_at),
+		}));
+	}
+
+	getSweep(sweepId: string): { id: string; name: string; createdAt: string; factorCells: Array<Record<string, string | number>> } | null {
+		const row = this.db.prepare('SELECT * FROM sweeps WHERE id = ?').get(sweepId) as SqlRow | undefined;
+		if (!row) return null;
+		return {
+			id: String(row.id),
+			name: String(row.name),
+			createdAt: String(row.created_at),
+			factorCells: parseJson(row.factor_cells, [] as Array<Record<string, string | number>>),
+		};
+	}
+
+	listBulkRunsByGroup(groupId: string): BulkRunRecord[] {
+		return this.db
+			.prepare('SELECT * FROM bulk_runs WHERE bulk_run_group_id = ? ORDER BY created_at ASC')
+			.all(groupId)
+			.map((row) => this.hydrateBulkRun(row as SqlRow));
+	}
+
+	getNextQueuedBulkInGroup(groupId: string): string | null {
+		const row = this.db
+			.prepare(
+				"SELECT id FROM bulk_runs WHERE bulk_run_group_id = ? AND status = 'queued' ORDER BY created_at ASC LIMIT 1",
+			)
+			.get(groupId) as { id?: string } | undefined;
+		return row?.id ?? null;
+	}
+
+	getBulkRunGroupId(bulkRunId: string): string | null {
+		const row = this.db
+			.prepare('SELECT bulk_run_group_id FROM bulk_runs WHERE id = ?')
+			.get(bulkRunId) as { bulk_run_group_id?: string | null } | undefined;
+		return row?.bulk_run_group_id ?? null;
+	}
+
+	getFirstRunInBulk(bulkRunId: string): string | null {
+		const row = this.db
+			.prepare(
+				"SELECT id FROM runs WHERE bulk_run_id = ? AND status = 'queued' ORDER BY bulk_run_index ASC, created_at ASC LIMIT 1",
+			)
+			.get(bulkRunId) as { id?: string } | undefined;
+		return row?.id ?? null;
 	}
 
 	listBulkRuns(): BulkRunRecord[] {
@@ -513,6 +586,7 @@ export class ThesisDb {
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 			completedAt: row.completed_at ? String(row.completed_at) : null,
+			groupId: row.bulk_run_group_id ? String(row.bulk_run_group_id) : null,
 		};
 	}
 
@@ -759,6 +833,7 @@ export class ThesisDb {
 		structuredBenignOutput?: boolean;
 		bulkRunId?: string | null;
 		bulkRunIndex?: number | null;
+		replicaIndex?: number | null;
 	}): RunDetail {
 		if (!input.bulkRunId) {
 			const active = this.db
@@ -787,8 +862,8 @@ export class ThesisDb {
 				max_attempts, retrieval_settings, summary, error, created_at, updated_at, completed_at,
 				attacker_prompt_version, benign_prompt_version, judge_prompt_version,
 				benign_task_has_safety_clause, label_retrieved_documents, structured_benign_output,
-				judge_model_id, judge_model_snapshot, bulk_run_id, bulk_run_index)
-				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				judge_model_id, judge_model_snapshot, bulk_run_id, bulk_run_index, replica_index)
+				VALUES (?, 'queued', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, '', ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				runId,
@@ -814,6 +889,7 @@ export class ThesisDb {
 				judgeModelSnapshot,
 				input.bulkRunId ?? null,
 				input.bulkRunIndex ?? null,
+				input.replicaIndex ?? 0,
 			);
 
 		for (const document of input.scenario.documents) {
@@ -1194,6 +1270,7 @@ export class ThesisDb {
 			.trim()
 			.split(/\s+/)
 			.filter((part) => /^[\p{L}\p{N}_-]+$/u.test(part))
+			.map((part) => `"${part.replace(/"/g, '""')}"`)
 			.join(' OR ');
 
 		if (!sanitizedQuery) {
@@ -1266,6 +1343,12 @@ export class ThesisDb {
 		const utilityScore =
 			scored.length === 0 ? 0 : scored.reduce((total, result) => total + result.score, 0) / scored.length;
 		return { success, utilityScore };
+	}
+
+	updateAttemptTokens(attemptId: string, attackerTokens: number, benignTokens: number) {
+		this.db
+			.prepare('UPDATE attempts SET attacker_tokens_used = ?, benign_tokens_used = ? WHERE id = ?')
+			.run(attackerTokens, benignTokens, attemptId);
 	}
 
 	private replaceScenarioChildren(scenarioId: string, input: ScenarioInput) {
@@ -1440,6 +1523,7 @@ export class ThesisDb {
 				row.bulk_run_index === null || row.bulk_run_index === undefined
 					? null
 					: Number(row.bulk_run_index),
+			replicaIndex: Number(row.replica_index ?? 0),
 		};
 	}
 
@@ -1465,6 +1549,8 @@ export class ThesisDb {
 			totalDurationMs: Number(row.total_duration_ms ?? 0),
 			defenseFilteredCount: Number(row.defense_filtered_count ?? 0),
 			toolCallsCount: Number(row.tool_calls_count ?? 0),
+			attackerTokensUsed: Number(row.attacker_tokens_used ?? 0),
+			benignTokensUsed: Number(row.benign_tokens_used ?? 0),
 			strategy: String(row.strategy ?? ''),
 			intendedEffect: (String(row.intended_effect ?? '') || 'unspecified') as AttemptRecord['intendedEffect'],
 			expectedTrigger: (String(row.expected_trigger ?? '') || 'unspecified') as AttemptRecord['expectedTrigger'],

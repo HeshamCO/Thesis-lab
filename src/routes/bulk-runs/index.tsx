@@ -45,6 +45,8 @@ function BulkRunsPage() {
 		benignTaskHasSafetyClause: true,
 		labelRetrievedDocuments: false,
 		structuredBenignOutput: true,
+		replicas: 1,
+		shuffleSeed: undefined,
 	});
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -88,9 +90,21 @@ function BulkRunsPage() {
 		});
 	};
 
+	const effectiveJudgeModelId = form.judgeModelId || form.benignModelId;
+	const selfJudgingWarning =
+		effectiveJudgeModelId && effectiveJudgeModelId === form.attackerModelId
+			? "Judge and attacker are the same model — results will be biased. Pick a different judge model."
+			: null;
+
 	const handleSubmit = () => {
 		if (!form.attackerModelId || !form.benignModelId || !form.defenseConfigId) {
 			toast.error("Select attacker model, benign model, and defense.");
+			return;
+		}
+		if (
+			selfJudgingWarning &&
+			!window.confirm(`${selfJudgingWarning}\n\nProceed anyway?`)
+		) {
 			return;
 		}
 		createBulk.mutate(form);
@@ -133,6 +147,33 @@ function BulkRunsPage() {
 						</div>
 					</div>
 
+					<div className="grid gap-3 md:grid-cols-2">
+						<div className="flex flex-col gap-1">
+							<Label>Replicates per scenario</Label>
+							<Input
+								type="number"
+								min={1}
+								max={20}
+								value={form.replicas ?? 1}
+								onChange={(event) =>
+									setForm({ ...form, replicas: Number(event.target.value) || 1 })
+								}
+							/>
+						</div>
+						<div className="flex flex-col gap-1">
+							<Label>Shuffle seed (empty = random)</Label>
+							<Input
+								type="number"
+								min={0}
+								value={form.shuffleSeed ?? ""}
+								onChange={(event) => {
+									const raw = event.target.value;
+									setForm({ ...form, shuffleSeed: raw === "" ? undefined : Number(raw) });
+								}}
+							/>
+						</div>
+					</div>
+
 					<div className="grid gap-3 md:grid-cols-3">
 						<ModelPicker
 							label="Attacker model"
@@ -154,6 +195,11 @@ function BulkRunsPage() {
 							allowEmpty
 						/>
 					</div>
+					{selfJudgingWarning ? (
+						<p className="rounded-md border border-amber-500/40 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+							⚠ {selfJudgingWarning}
+						</p>
+					) : null}
 
 					<div className="grid gap-3 md:grid-cols-2">
 						<div className="flex flex-col gap-1">

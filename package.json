@@ -19,6 +19,7 @@
     "format:check": "biome format",
     "seed:ollama": "bun run server/seed-ollama.ts",
     "seed:openrouter": "bun run server/seed-openrouter.ts",
+    "seed:cliproxy": "bun run server/seed-cliproxy.ts",
     "seed:scenarios": "bun run server/seed-scenarios.ts",
     "db:reset": "bun run server/reset-db.ts",
     "db:generate": "drizzle-kit generate",
