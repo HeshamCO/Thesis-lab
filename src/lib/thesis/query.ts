@@ -10,4 +10,5 @@ export const queryKeys = {
 	bulkRun: (id: string) => ["bulk-runs", id] as const,
 	sweeps: ["sweeps"] as const,
 	sweep: (id: string) => ["sweeps", id] as const,
+	prompts: ["prompts"] as const,
 };

@@ -11,6 +11,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
+import { filterModelsByRole } from "#/lib/thesis/model-roles";
 import { queryKeys } from "#/lib/thesis/query";
 import {
 	DEFAULT_ATTACKER_PROMPT_VERSION,
@@ -96,7 +97,8 @@ function SweepsPage() {
 			defenseConfigId: firstDefense,
 			maxAttempts: factors.maxAttempts[0] ?? maxAttemptsBase,
 			retrievalSettings: { topK: 5, query: "" },
-			attackerPromptVersion: (factors.attackerPromptVersion[0] ?? DEFAULT_ATTACKER_PROMPT_VERSION) as BulkRunInput["attackerPromptVersion"],
+			attackerPromptVersion: (factors.attackerPromptVersion[0] ??
+				DEFAULT_ATTACKER_PROMPT_VERSION) as BulkRunInput["attackerPromptVersion"],
 			benignPromptVersion: DEFAULT_BENIGN_PROMPT_VERSION,
 			judgePromptVersion: DEFAULT_JUDGE_PROMPT_VERSION,
 			benignTaskHasSafetyClause: true,
@@ -114,9 +116,10 @@ function SweepsPage() {
 				judgeModelId: factors.judgeModelId.length > 0 ? factors.judgeModelId : undefined,
 				defenseConfigId: factors.defenseConfigId.length > 0 ? factors.defenseConfigId : undefined,
 				maxAttempts: factors.maxAttempts.length > 0 ? factors.maxAttempts : undefined,
-				attackerPromptVersion: factors.attackerPromptVersion.length > 0
-					? (factors.attackerPromptVersion as Array<BulkRunInput["attackerPromptVersion"]>)
-					: undefined,
+				attackerPromptVersion:
+					factors.attackerPromptVersion.length > 0
+						? (factors.attackerPromptVersion as Array<BulkRunInput["attackerPromptVersion"]>)
+						: undefined,
 			},
 		});
 	};
@@ -174,19 +177,19 @@ function SweepsPage() {
 
 					<FactorPicker
 						title="Attacker models"
-						options={(models.data ?? []).map((m) => ({ label: m.name, value: m.id }))}
+						options={filterModelsByRole(models.data ?? [], "attacker").map((m) => ({ label: m.name, value: m.id }))}
 						selected={factors.attackerModelId}
 						onToggle={(v) => toggle("attackerModelId", v)}
 					/>
 					<FactorPicker
 						title="Benign models"
-						options={(models.data ?? []).map((m) => ({ label: m.name, value: m.id }))}
+						options={filterModelsByRole(models.data ?? [], "benign").map((m) => ({ label: m.name, value: m.id }))}
 						selected={factors.benignModelId}
 						onToggle={(v) => toggle("benignModelId", v)}
 					/>
 					<FactorPicker
 						title="Judge models"
-						options={(models.data ?? []).map((m) => ({ label: m.name, value: m.id }))}
+						options={filterModelsByRole(models.data ?? [], "judge").map((m) => ({ label: m.name, value: m.id }))}
 						selected={factors.judgeModelId}
 						onToggle={(v) => toggle("judgeModelId", v)}
 					/>
@@ -211,7 +214,7 @@ function SweepsPage() {
 
 					<div className="flex flex-col gap-2">
 						<Label>Scenarios ({scenarioIds.length === 0 ? "all" : scenarioIds.length} selected)</Label>
-						<div className="grid gap-2 rounded-md border p-3 md:grid-cols-2 max-h-64 overflow-auto">
+						<div className="grid gap-2 rounded-md border border-border/50 p-3 md:grid-cols-2 max-h-64 overflow-auto">
 							{(scenarios.data ?? []).map((scenario) => {
 								const selected = scenarioIds.length === 0 || scenarioIds.includes(scenario.id);
 								return (
@@ -264,11 +267,7 @@ function SweepsPage() {
 							{(sweeps.data ?? []).map((sweep) => (
 								<TableRow key={sweep.id}>
 									<TableCell>
-										<Link
-											to="/sweeps/$sweepId"
-											params={{ sweepId: sweep.id }}
-											className="font-medium hover:underline"
-										>
+										<Link to="/sweeps/$sweepId" params={{ sweepId: sweep.id }} className="font-medium hover:underline">
 											{sweep.name}
 										</Link>
 									</TableCell>
@@ -313,7 +312,9 @@ function FactorPicker<T extends string | number>({
 							type="button"
 							onClick={() => onToggle(option.value)}
 							className={`rounded-full border px-3 py-1 text-xs transition-colors ${
-								isSelected ? "border-primary bg-primary text-primary-foreground" : "border-muted-foreground/30 hover:bg-muted"
+								isSelected
+									? "border-primary bg-primary text-primary-foreground"
+									: "border-muted-foreground/30 hover:bg-muted"
 							}`}
 						>
 							{option.label}

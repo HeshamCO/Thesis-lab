@@ -15,10 +15,10 @@ export const evaluatorTypeSchema = z.enum([
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
 export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5"] as const;
-export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3"] as const;
+export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4"] as const;
 export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4"] as const;
 export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v5";
-export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v3";
+export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v4";
 export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v4";
 
 export const ATTACK_EFFECTS = ["none", "partial", "full"] as const;
@@ -30,6 +30,7 @@ export const WHY_IT_FAILED_LABELS = [
 	"partial_instruction_following",
 	"tool_policy_blocked",
 	"defense_filter_dropped",
+	"attacker_refused",
 	"succeeded",
 	"other",
 ] as const;

@@ -6,6 +6,7 @@ import { attackerV5 } from "./attacker/v5";
 import { benignV1 } from "./benign/v1";
 import { benignV2 } from "./benign/v2";
 import { benignV3 } from "./benign/v3";
+import { benignV4 } from "./benign/v4";
 import { judgeV1 } from "./judge/v1";
 import { judgeV2 } from "./judge/v2";
 import { judgeV3 } from "./judge/v3";
@@ -37,6 +38,7 @@ const benignPrompts: Record<string, BenignPromptVersion> = {
 	[benignV1.id]: benignV1,
 	[benignV2.id]: benignV2,
 	[benignV3.id]: benignV3,
+	[benignV4.id]: benignV4,
 };
 
 const judgePrompts: Record<string, JudgePromptVersion> = {
@@ -75,6 +77,16 @@ export function getJudgePrompt(id: string): JudgePromptVersion {
 	}
 	return prompt;
 }
+
+export function listRegisteredPrompts() {
+	return {
+		attacker: Object.values(attackerPrompts).map((p) => ({ id: p.id, description: p.description })),
+		benign: Object.values(benignPrompts).map((p) => ({ id: p.id, description: p.description })),
+		judge: Object.values(judgePrompts).map((p) => ({ id: p.id, description: p.description })),
+	};
+}
+
+export { attackerPrompts, benignPrompts, judgePrompts };
 
 export type {
 	AttackerBuildParams,

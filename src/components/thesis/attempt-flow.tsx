@@ -171,12 +171,7 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 					tone="info"
 					defaultOpen
 				>
-					<HighlightedText
-						text={attempt.benignResponse}
-						steps={stepResults}
-						emptyText="The benign model returned no text."
-						className="max-h-72 overflow-auto"
-					/>
+					<BenignResponseView attempt={attempt} stepResults={stepResults} />
 				</PhaseCard>
 
 				<PhaseCard
@@ -529,10 +524,7 @@ function StepList({
 						<CircleCheckIcon className="mt-0.5 size-4 text-[var(--success)]" />
 					) : (
 						<CircleXIcon
-							className={cn(
-								"mt-0.5 size-4",
-								step.stepSnapshot.required ? "text-destructive" : "text-[var(--warning)]",
-							)}
+							className={cn("mt-0.5 size-4", step.stepSnapshot.required ? "text-destructive" : "text-[var(--warning)]")}
 						/>
 					)}
 					<div className="flex flex-1 flex-col gap-0.5 min-w-0">
@@ -578,7 +570,12 @@ function SourceBadge({ source }: { source: string }) {
 			? "bg-[color-mix(in_oklch,var(--destructive)_14%,transparent)] text-destructive"
 			: "bg-[color-mix(in_oklch,var(--success)_14%,transparent)] text-[var(--success)]";
 	return (
-		<span className={cn("inline-flex h-5 items-center rounded px-1.5 text-[10px] font-medium uppercase tracking-wide", tone)}>
+		<span
+			className={cn(
+				"inline-flex h-5 items-center rounded px-1.5 text-[10px] font-medium uppercase tracking-wide",
+				tone,
+			)}
+		>
 			{source}
 		</span>
 	);
@@ -639,5 +636,82 @@ function ToolCallList({
 				);
 			})}
 		</ol>
+	);
+}
+
+function BenignResponseView({ attempt, stepResults }: { attempt: AttemptRecord; stepResults: StepResultRecord[] }) {
+	const [showRaw, setShowRaw] = useState(false);
+	const parsedOk = attempt.benignStructuredParseOk === true;
+	const hasStructured = parsedOk && typeof attempt.benignTaskAnswer === "string";
+
+	if (!hasStructured) {
+		return (
+			<HighlightedText
+				text={attempt.benignResponse}
+				steps={stepResults}
+				emptyText="The benign model returned no text."
+				className="max-h-72 overflow-auto"
+			/>
+		);
+	}
+
+	const flags: Array<{ label: string; value: boolean | null }> = [
+		{ label: "suspicious_instruction_detected", value: attempt.benignSuspiciousInstructionDetected },
+		{ label: "tool_called", value: attempt.benignToolCalledSelfReport },
+		{ label: "sensitive_data_exposed", value: attempt.benignSensitiveDataExposed },
+	];
+
+	return (
+		<div className="flex flex-col gap-3">
+			<div className="flex items-center gap-2">
+				<Badge variant="outline" className="text-[10px]">
+					structured
+				</Badge>
+				{attempt.benignUsedDocs && attempt.benignUsedDocs.length > 0 ? (
+					<span className="text-xs text-muted-foreground">used docs: {attempt.benignUsedDocs.join(", ")}</span>
+				) : null}
+				<button
+					type="button"
+					onClick={() => setShowRaw((v) => !v)}
+					className="ml-auto text-xs text-muted-foreground underline"
+				>
+					{showRaw ? "Show parsed" : "Show raw"}
+				</button>
+			</div>
+			{showRaw ? (
+				<HighlightedText
+					text={attempt.benignResponse}
+					steps={stepResults}
+					emptyText="The benign model returned no text."
+					className="max-h-72 overflow-auto"
+				/>
+			) : (
+				<>
+					<HighlightedText
+						text={attempt.benignTaskAnswer ?? ""}
+						steps={stepResults}
+						emptyText="The benign model returned an empty task_answer."
+						className="max-h-72 overflow-auto"
+					/>
+					<dl className="grid grid-cols-1 gap-1 rounded-md border border-dashed p-3 text-xs md:grid-cols-3">
+						{flags.map((flag) => (
+							<div key={flag.label} className="flex items-center gap-2">
+								<dt className="font-mono text-muted-foreground">{flag.label}</dt>
+								<dd
+									className={cn(
+										"font-mono",
+										flag.value === true && "text-red-600 dark:text-red-400",
+										flag.value === false && "text-emerald-600 dark:text-emerald-400",
+										flag.value === null && "text-muted-foreground",
+									)}
+								>
+									{flag.value === null ? "—" : String(flag.value)}
+								</dd>
+							</div>
+						))}
+					</dl>
+				</>
+			)}
+		</div>
 	);
 }

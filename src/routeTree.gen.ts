@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as SweepsIndexRouteImport } from './routes/sweeps/index'
 import { Route as ScenariosIndexRouteImport } from './routes/scenarios/index'
 import { Route as RunsIndexRouteImport } from './routes/runs/index'
+import { Route as PromptsIndexRouteImport } from './routes/prompts/index'
 import { Route as ModelsIndexRouteImport } from './routes/models/index'
 import { Route as DefensesIndexRouteImport } from './routes/defenses/index'
 import { Route as BulkRunsIndexRouteImport } from './routes/bulk-runs/index'
@@ -40,6 +41,11 @@ const ScenariosIndexRoute = ScenariosIndexRouteImport.update({
 const RunsIndexRoute = RunsIndexRouteImport.update({
   id: '/runs/',
   path: '/runs/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PromptsIndexRoute = PromptsIndexRouteImport.update({
+  id: '/prompts/',
+  path: '/prompts/',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ModelsIndexRoute = ModelsIndexRouteImport.update({
@@ -93,6 +99,7 @@ export interface FileRoutesByFullPath {
   '/bulk-runs/': typeof BulkRunsIndexRoute
   '/defenses/': typeof DefensesIndexRoute
   '/models/': typeof ModelsIndexRoute
+  '/prompts/': typeof PromptsIndexRoute
   '/runs/': typeof RunsIndexRoute
   '/scenarios/': typeof ScenariosIndexRoute
   '/sweeps/': typeof SweepsIndexRoute
@@ -107,6 +114,7 @@ export interface FileRoutesByTo {
   '/bulk-runs': typeof BulkRunsIndexRoute
   '/defenses': typeof DefensesIndexRoute
   '/models': typeof ModelsIndexRoute
+  '/prompts': typeof PromptsIndexRoute
   '/runs': typeof RunsIndexRoute
   '/scenarios': typeof ScenariosIndexRoute
   '/sweeps': typeof SweepsIndexRoute
@@ -122,6 +130,7 @@ export interface FileRoutesById {
   '/bulk-runs/': typeof BulkRunsIndexRoute
   '/defenses/': typeof DefensesIndexRoute
   '/models/': typeof ModelsIndexRoute
+  '/prompts/': typeof PromptsIndexRoute
   '/runs/': typeof RunsIndexRoute
   '/scenarios/': typeof ScenariosIndexRoute
   '/sweeps/': typeof SweepsIndexRoute
@@ -138,6 +147,7 @@ export interface FileRouteTypes {
     | '/bulk-runs/'
     | '/defenses/'
     | '/models/'
+    | '/prompts/'
     | '/runs/'
     | '/scenarios/'
     | '/sweeps/'
@@ -152,6 +162,7 @@ export interface FileRouteTypes {
     | '/bulk-runs'
     | '/defenses'
     | '/models'
+    | '/prompts'
     | '/runs'
     | '/scenarios'
     | '/sweeps'
@@ -166,6 +177,7 @@ export interface FileRouteTypes {
     | '/bulk-runs/'
     | '/defenses/'
     | '/models/'
+    | '/prompts/'
     | '/runs/'
     | '/scenarios/'
     | '/sweeps/'
@@ -181,6 +193,7 @@ export interface RootRouteChildren {
   BulkRunsIndexRoute: typeof BulkRunsIndexRoute
   DefensesIndexRoute: typeof DefensesIndexRoute
   ModelsIndexRoute: typeof ModelsIndexRoute
+  PromptsIndexRoute: typeof PromptsIndexRoute
   RunsIndexRoute: typeof RunsIndexRoute
   ScenariosIndexRoute: typeof ScenariosIndexRoute
   SweepsIndexRoute: typeof SweepsIndexRoute
@@ -214,6 +227,13 @@ declare module '@tanstack/react-router' {
       path: '/runs'
       fullPath: '/runs/'
       preLoaderRoute: typeof RunsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/prompts/': {
+      id: '/prompts/'
+      path: '/prompts'
+      fullPath: '/prompts/'
+      preLoaderRoute: typeof PromptsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/models/': {
@@ -285,6 +305,7 @@ const rootRouteChildren: RootRouteChildren = {
   BulkRunsIndexRoute: BulkRunsIndexRoute,
   DefensesIndexRoute: DefensesIndexRoute,
   ModelsIndexRoute: ModelsIndexRoute,
+  PromptsIndexRoute: PromptsIndexRoute,
   RunsIndexRoute: RunsIndexRoute,
   ScenariosIndexRoute: ScenariosIndexRoute,
   SweepsIndexRoute: SweepsIndexRoute,

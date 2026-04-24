@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router";
-import { ActivityIcon, BotIcon, FlaskConicalIcon, GridIcon, LayersIcon, LayoutDashboardIcon, ShieldIcon, TargetIcon } from "lucide-react";
+import { ActivityIcon, BotIcon, FileTextIcon, FlaskConicalIcon, GridIcon, LayersIcon, LayoutDashboardIcon, ShieldIcon, TargetIcon } from "lucide-react";
 import ThemeToggle from "./ThemeToggle";
 import { cn } from "#/lib/utils";
 
@@ -11,6 +11,7 @@ const navItems = [
 	{ to: "/runs", label: "Runs", icon: ActivityIcon, exact: false },
 	{ to: "/bulk-runs", label: "Bulk runs", icon: LayersIcon, exact: false },
 	{ to: "/sweeps", label: "Sweeps", icon: GridIcon, exact: false },
+	{ to: "/prompts", label: "Prompts", icon: FileTextIcon, exact: false },
 ] as const;
 
 export default function Header() {

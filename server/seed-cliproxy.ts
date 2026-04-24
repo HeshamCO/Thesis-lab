@@ -1,43 +1,27 @@
 import { thesisDb } from "./db";
+import { MODEL_CATALOG, type CatalogEntry, type ModelRole } from "./models/catalog";
 import type { ModelConfig, ModelConfigInput } from "../src/lib/thesis/schemas";
 
 const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:3334";
-const CLIPROXY_BASE_URL = process.env.CLIPROXY_BASE_URL ?? "http://localhost:8317/v1";
-const CLIPROXY_ENV_VAR = "CLIPROXY_API_KEY";
 
-// Mirrors cliproxyapi's /v1/models response (id, owner, created) as of April 2026.
-// Each entry becomes one ModelConfig row pointing at the local cliproxy instance.
-const CLIPROXY_MODELS: Array<{ id: string; owner: string; humanName?: string }> = [
-	// Anthropic
-	{ id: "claude-opus-4-7", owner: "anthropic", humanName: "Claude Opus 4.7" },
-	{ id: "claude-sonnet-4-6", owner: "anthropic", humanName: "Claude Sonnet 4.6" },
-	{ id: "claude-haiku-4-5-20251001", owner: "anthropic", humanName: "Claude Haiku 4.5" },
-	// OpenAI
-	{ id: "gpt-5.4", owner: "openai", humanName: "GPT-5.4" },
-	{ id: "gpt-5.4-mini", owner: "openai", humanName: "GPT-5.4 mini" },
-	{ id: "gpt-5.3-codex", owner: "openai", humanName: "GPT-5.3 Codex" },
-	// Google
-	{ id: "gemini-3-pro-preview", owner: "google", humanName: "Gemini 3 Pro" },
-	{ id: "gemini-3-flash-preview", owner: "google", humanName: "Gemini 3 Flash" },
-	{ id: "gemini-2.5-flash", owner: "google", humanName: "Gemini 2.5 Flash" },
-];
-
-function toModelConfigInput(entry: (typeof CLIPROXY_MODELS)[number]): ModelConfigInput {
-	const displayName = entry.humanName ?? entry.id;
-	// Bigger output budget for flagship frontier models, smaller for flash/mini.
-	const isFlash = /flash|haiku|mini|lite|image/i.test(entry.id);
+function catalogEntryToInput(entry: CatalogEntry): ModelConfigInput {
+	// The DB row is now a thin mirror of the catalog. Per-role tuning is resolved at call time
+	// by server/models/resolver.ts, so the row's temperature/maxTokens are only fallbacks for
+	// code paths that don't know about the catalog yet (tests, legacy seeders).
+	const benign = entry.perRole.benign;
+	const roleTags: ModelRole[] = [...entry.allowedRoles];
 	return {
-		name: `${displayName}`,
-		baseUrl: CLIPROXY_BASE_URL,
-		modelName: entry.id,
-		apiKeyEnvVar: CLIPROXY_ENV_VAR,
-		temperature: 0.2,
-		maxTokens: isFlash ? 2000 : 4000,
-		roleTags: ["attacker", "benign", "judge", "cliproxy", entry.owner],
+		name: entry.displayName,
+		baseUrl: entry.baseUrl,
+		modelName: entry.modelId,
+		apiKeyEnvVar: entry.apiKeyEnvVar,
+		temperature: benign.temperature ?? 0.2,
+		maxTokens: benign.maxTokens,
+		roleTags: [...roleTags, "cliproxy", entry.family],
 	};
 }
 
-const MODELS = CLIPROXY_MODELS.map(toModelConfigInput);
+const MODELS = MODEL_CATALOG.map(catalogEntryToInput);
 
 await seedCliProxyModels();
 

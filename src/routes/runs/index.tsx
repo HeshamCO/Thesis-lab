@@ -13,6 +13,7 @@ import { Label } from "#/components/ui/label";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "#/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
+import { filterModelsByRole } from "#/lib/thesis/model-roles";
 import { queryKeys } from "#/lib/thesis/query";
 import {
 	ATTACKER_PROMPT_VERSIONS,
@@ -117,7 +118,7 @@ function RunsPage() {
 							<EntitySelect
 								value={form.attackerModelId}
 								placeholder="Select attacker"
-								items={models.data ?? []}
+								items={filterModelsByRole(models.data ?? [], "attacker")}
 								onChange={(attackerModelId) => setForm({ ...form, attackerModelId })}
 							/>
 						</Field>
@@ -125,7 +126,7 @@ function RunsPage() {
 							<EntitySelect
 								value={form.benignModelId}
 								placeholder="Select benign"
-								items={models.data ?? []}
+								items={filterModelsByRole(models.data ?? [], "benign")}
 								onChange={(benignModelId) => setForm({ ...form, benignModelId })}
 							/>
 						</Field>
@@ -133,7 +134,7 @@ function RunsPage() {
 							<EntitySelect
 								value={form.judgeModelId ?? ""}
 								placeholder="Same as benign model"
-								items={models.data ?? []}
+								items={filterModelsByRole(models.data ?? [], "judge")}
 								onChange={(judgeModelId) => setForm({ ...form, judgeModelId })}
 							/>
 						</Field>

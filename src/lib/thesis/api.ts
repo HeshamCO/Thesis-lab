@@ -145,4 +145,10 @@ export const api = {
 			`/api/sweeps/${id}/stop`,
 			{ method: "POST" },
 		),
+	prompts: () =>
+		request<{
+			attacker: Array<{ id: string; description: string; system: string; user: string }>;
+			benign: Array<{ id: string; description: string; system: string; user: string }>;
+			judge: Array<{ id: string; description: string; system: string; user: string }>;
+		}>("/api/prompts"),
 };

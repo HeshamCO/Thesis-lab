@@ -19,6 +19,7 @@ import {
 } from "#/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
+import { filterModelsByRole } from "#/lib/thesis/model-roles";
 import { queryKeys } from "#/lib/thesis/query";
 import {
 	DEFAULT_ATTACKER_PROMPT_VERSION,
@@ -178,19 +179,19 @@ function BulkRunsPage() {
 						<ModelPicker
 							label="Attacker model"
 							value={form.attackerModelId}
-							options={models.data ?? []}
+							options={filterModelsByRole(models.data ?? [], "attacker")}
 							onChange={(value) => setForm({ ...form, attackerModelId: value })}
 						/>
 						<ModelPicker
 							label="Benign model"
 							value={form.benignModelId}
-							options={models.data ?? []}
+							options={filterModelsByRole(models.data ?? [], "benign")}
 							onChange={(value) => setForm({ ...form, benignModelId: value })}
 						/>
 						<ModelPicker
 							label="Judge model (optional)"
 							value={form.judgeModelId ?? ""}
-							options={models.data ?? []}
+							options={filterModelsByRole(models.data ?? [], "judge")}
 							onChange={(value) => setForm({ ...form, judgeModelId: value || undefined })}
 							allowEmpty
 						/>

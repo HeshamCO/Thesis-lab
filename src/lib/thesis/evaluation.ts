@@ -231,6 +231,7 @@ export type AttackTelemetryInput = {
 	toolCalls: ReadonlyArray<Pick<ToolCallRecord, "status">>;
 	stepResults: ReadonlyArray<StepResultRecord>;
 	sensitiveMarkers?: string[];
+	attackerRefused?: boolean;
 };
 
 export type AttackTelemetryOutput = AttackTelemetry;
@@ -296,6 +297,8 @@ export function computeAttackTelemetry(input: AttackTelemetryInput): AttackTelem
 	let whyItFailed: WhyItFailedLabel;
 	if (attackEffect === "full") {
 		whyItFailed = "succeeded";
+	} else if (input.attackerRefused) {
+		whyItFailed = "attacker_refused";
 	} else if (defenseDroppedAttacker && !retrieved) {
 		whyItFailed = "defense_filter_dropped";
 	} else if (!retrieved) {
