@@ -3,9 +3,9 @@ import { MODEL_CATALOG } from "./catalog";
 import { resolveCallParams } from "./resolver";
 
 describe("resolveCallParams — GPT-5 family", () => {
-	test("attacker gets high effort + medium verbosity, no temperature, max_completion_tokens", () => {
+	test("attacker gets low effort + medium verbosity, no temperature, max_completion_tokens", () => {
 		const { body } = resolveCallParams("gpt-5.5", "attacker", {});
-		expect(body.reasoning_effort).toBe("high");
+		expect(body.reasoning_effort).toBe("low");
 		expect(body.verbosity).toBe("medium");
 		expect(body.temperature).toBeUndefined();
 		expect(body.max_tokens).toBeUndefined();
@@ -18,17 +18,17 @@ describe("resolveCallParams — GPT-5 family", () => {
 		expect(body.reasoning_effort).toBeUndefined();
 	});
 
-	test("judge gets high effort + low verbosity", () => {
+	test("judge gets low effort + low verbosity (calibrated grading without over-thinking)", () => {
 		const { body } = resolveCallParams("gpt-5.4", "judge", {});
-		expect(body.reasoning_effort).toBe("high");
+		expect(body.reasoning_effort).toBe("low");
 		expect(body.verbosity).toBe("low");
 	});
 });
 
 describe("resolveCallParams — Claude 4 family", () => {
-	test("attacker: reasoning_effort=high, no temperature, max_tokens honored", () => {
+	test("attacker: reasoning_effort=low, no temperature (only benign role carries it), max_tokens honored", () => {
 		const { body } = resolveCallParams("claude-opus-4-7", "attacker", {});
-		expect(body.reasoning_effort).toBe("high");
+		expect(body.reasoning_effort).toBe("low");
 		expect(body.temperature).toBeUndefined();
 		expect(body.max_tokens).toBe(6000);
 		expect(body.verbosity).toBeUndefined();
@@ -42,10 +42,10 @@ describe("resolveCallParams — Claude 4 family", () => {
 });
 
 describe("resolveCallParams — Gemini family", () => {
-	test("Gemini 3 Pro attacker: temperature + high effort + max_tokens", () => {
+	test("Gemini 3 Pro attacker: temperature=0.8 (exploration) + low effort + max_tokens", () => {
 		const { body } = resolveCallParams("gemini-3-pro-preview", "attacker", {});
-		expect(body.temperature).toBe(0.2);
-		expect(body.reasoning_effort).toBe("high");
+		expect(body.temperature).toBe(0.8);
+		expect(body.reasoning_effort).toBe("low");
 		expect(body.max_tokens).toBe(4000);
 	});
 

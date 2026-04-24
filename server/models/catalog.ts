@@ -36,7 +36,7 @@ const CLIPROXY_BASE_URL = "http://localhost:8317/v1";
 // Temperature still honored on Claude 4.x (not GPT-5 style); keep a low default for benign.
 function claudePerRole(attackerMax: number, benignMax: number, judgeMax: number): Record<ModelRole, RoleParams> {
 	return {
-		attacker: { maxTokens: attackerMax, reasoningEffort: "high" },
+		attacker: { maxTokens: attackerMax, reasoningEffort: "low" },
 		benign: { temperature: 0.2, maxTokens: benignMax },
 		judge: { maxTokens: judgeMax, reasoningEffort: "low" },
 	};
@@ -46,7 +46,7 @@ function claudePerRole(attackerMax: number, benignMax: number, judgeMax: number)
 // Reasoning models: reject temperature. Use reasoning_effort + verbosity instead.
 function gpt5PerRole(attackerMax: number, benignMax: number, judgeMax: number): Record<ModelRole, RoleParams> {
 	return {
-		attacker: { maxTokens: attackerMax, reasoningEffort: "high", verbosity: "medium" },
+		attacker: { maxTokens: attackerMax, reasoningEffort: "low", verbosity: "medium" },
 		benign: { maxTokens: benignMax, verbosity: "low" },
 		judge: { maxTokens: judgeMax, reasoningEffort: "low", verbosity: "low" },
 	};
@@ -61,7 +61,7 @@ function geminiPerRole(
 	benignEffort?: RoleParams["reasoningEffort"],
 ): Record<ModelRole, RoleParams> {
 	return {
-		attacker: { temperature: 0.8, maxTokens: attackerMax, reasoningEffort: "high" },
+		attacker: { temperature: 0.8, maxTokens: attackerMax, reasoningEffort: "low" },
 		benign: { temperature: 0.2, maxTokens: benignMax, ...(benignEffort ? { reasoningEffort: benignEffort } : {}) },
 		judge: { temperature: 0.2, maxTokens: judgeMax, reasoningEffort: "low" },
 	};
