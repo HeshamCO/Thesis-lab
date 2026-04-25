@@ -380,8 +380,6 @@ const CATEGORY_KEYWORDS: Array<{ keyword: string; label: string }> = [
 	{ keyword: "output_manipulation", label: "output_manipulation" },
 	{ keyword: "text_marker", label: "text_marker_injection" },
 	{ keyword: "url_recommendation", label: "url_recommendation" },
-	{ keyword: "single_tool_trigger", label: "single_tool_trigger" },
-	{ keyword: "tool_arg_capture", label: "tool_arg_capture" },
 	{ keyword: "answer_inversion", label: "answer_inversion" },
 	{ keyword: "style_format", label: "style_format_hijack" },
 ];

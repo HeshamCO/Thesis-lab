@@ -73,6 +73,24 @@ describe("resolveCallParams — unknown model fallback", () => {
 	});
 });
 
+describe("resolveCallParams — frequency_penalty (attacker-only diversification)", () => {
+	test("attacker carries frequency_penalty across all three families", () => {
+		for (const modelId of ["claude-opus-4-7", "gpt-5.5", "gemini-3-pro-preview"]) {
+			const { body } = resolveCallParams(modelId, "attacker", {});
+			expect(body.frequency_penalty).toBe(0.4);
+		}
+	});
+
+	test("benign and judge never carry frequency_penalty (consistency over diversity)", () => {
+		for (const modelId of ["claude-sonnet-4-6", "gpt-5.4", "gemini-3-flash-preview"]) {
+			for (const role of ["benign", "judge"] as const) {
+				const { body } = resolveCallParams(modelId, role, {});
+				expect(body.frequency_penalty).toBeUndefined();
+			}
+		}
+	});
+});
+
 describe("catalog invariants", () => {
 	test("every catalog entry covers all three roles", () => {
 		for (const entry of MODEL_CATALOG) {

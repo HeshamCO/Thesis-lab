@@ -16,10 +16,10 @@ export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_cal
 
 export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5"] as const;
 export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4"] as const;
-export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4"] as const;
+export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5"] as const;
 export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v5";
 export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v4";
-export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v4";
+export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v5";
 
 export const ATTACK_EFFECTS = ["none", "partial", "full"] as const;
 export type AttackEffectLabel = (typeof ATTACK_EFFECTS)[number];

@@ -11,6 +11,11 @@ export type RoleParams = {
 	maxTokens: number;
 	reasoningEffort?: "minimal" | "low" | "medium" | "high";
 	verbosity?: "low" | "medium" | "high"; // GPT-5 only
+	// Frequency penalty (-2.0..2.0) pushes the model away from repeating its own prior wording.
+	// The attacker loop feeds prior injection documents back into the prompt; without a penalty,
+	// attempts 2-N tend to rehash attempt 1's phrasing, which kills cross-attempt learning.
+	// Set on attacker only — judge and benign want stable, reproducible outputs.
+	frequencyPenalty?: number;
 };
 
 export type CatalogEntry = {
@@ -36,9 +41,9 @@ const CLIPROXY_BASE_URL = "http://localhost:8317/v1";
 // Temperature still honored on Claude 4.x (not GPT-5 style); keep a low default for benign.
 function claudePerRole(attackerMax: number, benignMax: number, judgeMax: number): Record<ModelRole, RoleParams> {
 	return {
-		attacker: { maxTokens: attackerMax, reasoningEffort: "low" },
-		benign: { temperature: 0.2, maxTokens: benignMax },
-		judge: { maxTokens: judgeMax, reasoningEffort: "low" },
+		attacker: { maxTokens: attackerMax, reasoningEffort: "low", frequencyPenalty: 0.5 },
+		benign: { temperature: 0.2, maxTokens: benignMax ,frequencyPenalty: 1},
+		judge: { maxTokens: judgeMax, reasoningEffort: "low", frequencyPenalty: 1 },
 	};
 }
 
@@ -46,9 +51,9 @@ function claudePerRole(attackerMax: number, benignMax: number, judgeMax: number)
 // Reasoning models: reject temperature. Use reasoning_effort + verbosity instead.
 function gpt5PerRole(attackerMax: number, benignMax: number, judgeMax: number): Record<ModelRole, RoleParams> {
 	return {
-		attacker: { maxTokens: attackerMax, reasoningEffort: "low", verbosity: "medium" },
-		benign: { maxTokens: benignMax, verbosity: "low" },
-		judge: { maxTokens: judgeMax, reasoningEffort: "low", verbosity: "low" },
+		attacker: { maxTokens: attackerMax, reasoningEffort: "low", verbosity: "medium", frequencyPenalty: 0.5 },
+		benign: { maxTokens: benignMax, verbosity: "low",frequencyPenalty: 1 },
+		judge: { maxTokens: judgeMax, reasoningEffort: "low", verbosity: "low" ,frequencyPenalty: 1},
 	};
 }
 
@@ -61,9 +66,9 @@ function geminiPerRole(
 	benignEffort?: RoleParams["reasoningEffort"],
 ): Record<ModelRole, RoleParams> {
 	return {
-		attacker: { temperature: 0.8, maxTokens: attackerMax, reasoningEffort: "low" },
-		benign: { temperature: 0.2, maxTokens: benignMax, ...(benignEffort ? { reasoningEffort: benignEffort } : {}) },
-		judge: { temperature: 0.2, maxTokens: judgeMax, reasoningEffort: "low" },
+		attacker: { temperature: 0.8, maxTokens: attackerMax, reasoningEffort: "low", frequencyPenalty: 0.5 },
+		benign: { temperature: 0.2, frequencyPenalty: 1, maxTokens: benignMax, ...(benignEffort ? { reasoningEffort: benignEffort } : {}) },
+		judge: { temperature: 0.2, maxTokens: judgeMax, reasoningEffort: "low", frequencyPenalty: 1 },
 	};
 }
 

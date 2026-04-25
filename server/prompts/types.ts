@@ -53,6 +53,15 @@ export type JudgeBuildParams = {
 	benignStructured?: BenignStructuredOutput | null;
 };
 
+// Batched judge: one call per attempt verdicts every success step holistically. The judge
+// can apply semantic matching across literal/regex rubrics (e.g., treat "7-days" as
+// satisfying a "7 days" contains_text step), and cross-reference steps that share context.
+export type BatchedJudgeBuildParams = {
+	steps: SuccessStepInput[];
+	benignResponse: string;
+	benignStructured?: BenignStructuredOutput | null;
+};
+
 export type AttackerPromptVersion = {
 	id: string;
 	description: string;
@@ -69,4 +78,10 @@ export type JudgePromptVersion = {
 	id: string;
 	description: string;
 	build: (params: JudgeBuildParams) => BuiltPrompt;
+};
+
+export type BatchedJudgePromptVersion = {
+	id: string;
+	description: string;
+	build: (params: BatchedJudgeBuildParams) => BuiltPrompt;
 };

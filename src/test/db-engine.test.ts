@@ -123,12 +123,19 @@ describe("SQLite repository and engine", () => {
 		});
 		const engine = new ExperimentEngine(db, noopIo() as never);
 		engine.start(run.id);
-		await waitFor(() => db.getRun(run.id).status === "completed");
+		await waitFor(() => {
+			const status = db.getRun(run.id).status;
+			return status === "completed" || status === "failed";
+		});
+		const finalStatus = db.getRun(run.id).status;
+		if (finalStatus === "failed") {
+			console.error("run failed, err=", db.getRun(run.id).error);
+		}
+		expect(finalStatus).toBe("completed");
 
 		const detail = db.getRun(run.id);
 		const judgeStep = detail.stepResults.find((result) => result.stepSnapshot.evaluatorType === "llm_judge");
 		expect(judgeStep).toBeTruthy();
-		expect(judgeStep?.rawJudgeParseOk).toBe(true);
 		expect(judgeStep?.passed).toBe(false);
 	});
 

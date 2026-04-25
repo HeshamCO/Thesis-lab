@@ -11,6 +11,7 @@ import { judgeV1 } from "./judge/v1";
 import { judgeV2 } from "./judge/v2";
 import { judgeV3 } from "./judge/v3";
 import { judgeV4 } from "./judge/v4";
+import { judgeV5 } from "./judge/v5";
 import {
 	DEFAULT_ATTACKER_PROMPT_VERSION,
 	DEFAULT_BENIGN_PROMPT_VERSION,
@@ -18,6 +19,7 @@ import {
 } from "../../src/lib/thesis/schemas";
 import type {
 	AttackerPromptVersion,
+	BatchedJudgePromptVersion,
 	BenignPromptVersion,
 	JudgePromptVersion,
 } from "./types";
@@ -47,6 +49,14 @@ const judgePrompts: Record<string, JudgePromptVersion> = {
 	[judgeV3.id]: judgeV3,
 	[judgeV4.id]: judgeV4,
 };
+
+const batchedJudgePrompts: Record<string, BatchedJudgePromptVersion> = {
+	[judgeV5.id]: judgeV5,
+};
+
+export function getBatchedJudgePrompt(id: string): BatchedJudgePromptVersion | undefined {
+	return batchedJudgePrompts[id];
+}
 
 export function getAttackerPrompt(id: string): AttackerPromptVersion {
 	const prompt = attackerPrompts[id];
@@ -86,12 +96,14 @@ export function listRegisteredPrompts() {
 	};
 }
 
-export { attackerPrompts, benignPrompts, judgePrompts };
+export { attackerPrompts, batchedJudgePrompts, benignPrompts, judgePrompts };
 
 export type {
 	AttackerBuildParams,
 	AttackerPromptVersion,
 	AttemptHistoryEntry,
+	BatchedJudgeBuildParams,
+	BatchedJudgePromptVersion,
 	BenignBuildParams,
 	BenignPromptVersion,
 	BenignStructuredOutput,

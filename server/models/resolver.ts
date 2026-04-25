@@ -41,6 +41,7 @@ export function resolveCallParams(
 
 	if (params.reasoningEffort) body.reasoning_effort = params.reasoningEffort;
 	if (params.verbosity) body.verbosity = params.verbosity;
+	if (typeof params.frequencyPenalty === "number") body.frequency_penalty = params.frequencyPenalty;
 
 	return { body };
 }
