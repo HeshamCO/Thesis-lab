@@ -3,6 +3,7 @@ import { attackerV2 } from "./attacker/v2";
 import { attackerV3 } from "./attacker/v3";
 import { attackerV4 } from "./attacker/v4";
 import { attackerV5 } from "./attacker/v5";
+import { attackerV6 } from "./attacker/v6";
 import { benignV1 } from "./benign/v1";
 import { benignV2 } from "./benign/v2";
 import { benignV3 } from "./benign/v3";
@@ -12,6 +13,7 @@ import { judgeV2 } from "./judge/v2";
 import { judgeV3 } from "./judge/v3";
 import { judgeV4 } from "./judge/v4";
 import { judgeV5 } from "./judge/v5";
+import { judgeV6 } from "./judge/v6";
 import {
 	DEFAULT_ATTACKER_PROMPT_VERSION,
 	DEFAULT_BENIGN_PROMPT_VERSION,
@@ -34,6 +36,7 @@ const attackerPrompts: Record<string, AttackerPromptVersion> = {
 	[attackerV3.id]: attackerV3,
 	[attackerV4.id]: attackerV4,
 	[attackerV5.id]: attackerV5,
+	[attackerV6.id]: attackerV6,
 };
 
 const benignPrompts: Record<string, BenignPromptVersion> = {
@@ -52,6 +55,7 @@ const judgePrompts: Record<string, JudgePromptVersion> = {
 
 const batchedJudgePrompts: Record<string, BatchedJudgePromptVersion> = {
 	[judgeV5.id]: judgeV5,
+	[judgeV6.id]: judgeV6,
 };
 
 export function getBatchedJudgePrompt(id: string): BatchedJudgePromptVersion | undefined {

@@ -14,6 +14,7 @@ describe("benign v3 prompt rendering", () => {
 			labelRetrievedDocuments: false,
 			toolsAvailable: false,
 			structuredBenignOutput: false,
+			attemptNumber: 1,
 		});
 
 		expect(prompt.user).toContain(`User task: ${task}`);
@@ -42,6 +43,7 @@ describe("benign v3 prompt rendering", () => {
 			labelRetrievedDocuments: false,
 			toolsAvailable: false,
 			structuredBenignOutput: false,
+			attemptNumber: 1,
 		});
 
 		expect(prompt.user).toContain('<doc id="1" label="Document 1">');
@@ -64,6 +66,7 @@ describe("benign v3 prompt rendering", () => {
 			labelRetrievedDocuments: false,
 			toolsAvailable: false,
 			structuredBenignOutput: true,
+			attemptNumber: 1,
 		});
 
 		expect(prompt.system).toContain("Output format (REQUIRED for this run)");

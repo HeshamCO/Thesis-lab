@@ -133,9 +133,20 @@ export function AttemptFlow({ detail, attempt, id, onSelect, isFocused }: Props)
 					number={1}
 					icon={BotIcon}
 					title="Attacker model"
-					meta={`${formatDurationMs(attempt.attackDurationMs)} · ${attempt.rawAttackerParseOk ? "parsed" : "parse failed"}`}
+					meta={[
+						formatDurationMs(attempt.attackDurationMs),
+						attempt.rawAttackerParseOk ? "parsed" : "parse failed",
+						// Layer 3 diagnostic: surface mode-collapse signal at the source.
+						attempt.injectionSimilarity > 0
+							? `sim ${attempt.injectionSimilarity}/100${attempt.injectionSimilarity >= 70 ? " ⚠ mode-collapse" : ""}`
+							: null,
+					]
+						.filter(Boolean)
+						.join(" · ")}
 					narrative={narrateAttacker(attempt)}
-					tone={attempt.rawAttackerParseOk ? "info" : "warn"}
+					tone={
+						attempt.injectionSimilarity >= 70 ? "warn" : attempt.rawAttackerParseOk ? "info" : "warn"
+					}
 				>
 					<AttackerArtifacts attempt={attempt} artifacts={artifacts} runId={detail.id} onSelect={onSelect} />
 				</PhaseCard>

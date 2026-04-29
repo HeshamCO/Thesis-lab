@@ -41,6 +41,9 @@ export const modelConfigs = sqliteTable("model_configs", {
 	temperature: integer("temperature").notNull(),
 	maxTokens: integer("max_tokens").notNull(),
 	roleTags: text("role_tags", { mode: "json" }).notNull(),
+	// 'cliproxy' | 'openrouter' | 'ollama' | 'openai-compat'.
+	// Nullable for legacy rows; backfilled at startup based on baseUrl heuristics.
+	provider: text("provider"),
 	createdAt: text("created_at").notNull(),
 	updatedAt: text("updated_at").notNull(),
 });

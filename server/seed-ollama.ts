@@ -12,6 +12,7 @@ const OLLAMA_MODELS: ModelConfigInput[] = [
 		temperature: 0.2,
 		maxTokens: 2000,
 		roleTags: ["attacker", "benign", "judge", "ssa", "ollama"],
+		provider: "ollama",
 	},
 	{
 		name: "Qwen3 Coder 30B",
@@ -21,6 +22,7 @@ const OLLAMA_MODELS: ModelConfigInput[] = [
 		temperature: 0.2,
 		maxTokens: 2000,
 		roleTags: ["attacker", "benign", "judge", "ssa", "ollama"],
+		provider: "ollama",
 	},
 ];
 

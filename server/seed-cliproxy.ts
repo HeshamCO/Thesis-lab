@@ -17,11 +17,13 @@ function catalogEntryToInput(entry: CatalogEntry): ModelConfigInput {
 		apiKeyEnvVar: entry.apiKeyEnvVar,
 		temperature: benign.temperature ?? 0.2,
 		maxTokens: benign.maxTokens,
-		roleTags: [...roleTags, "cliproxy", entry.family],
+		roleTags: [...roleTags, entry.provider, entry.family],
+		provider: entry.provider,
 	};
 }
 
-const MODELS = MODEL_CATALOG.map(catalogEntryToInput);
+// This script only seeds cliproxy entries; OpenRouter has its own seeder.
+const MODELS = MODEL_CATALOG.filter((entry) => entry.provider === "cliproxy").map(catalogEntryToInput);
 
 await seedCliProxyModels();
 

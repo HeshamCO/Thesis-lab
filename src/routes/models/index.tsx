@@ -12,10 +12,22 @@ import { Label } from "#/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
-import type { ModelConfig, ModelConfigInput, ModelConnectionResult } from "#/lib/thesis/schemas";
+import type {
+	ModelConfig,
+	ModelConfigInput,
+	ModelConnectionResult,
+	ModelProvider,
+} from "#/lib/thesis/schemas";
 import { cn } from "#/lib/utils";
 
 export const Route = createFileRoute("/models/")({ component: ModelsPage });
+
+const PROVIDER_OPTIONS: ReadonlyArray<{ value: ModelProvider; label: string }> = [
+	{ value: "openai-compat", label: "OpenAI-compatible" },
+	{ value: "cliproxy", label: "cliproxy (local)" },
+	{ value: "openrouter", label: "OpenRouter" },
+	{ value: "ollama", label: "Ollama" },
+];
 
 const emptyModel: ModelConfigInput = {
 	name: "",
@@ -25,6 +37,7 @@ const emptyModel: ModelConfigInput = {
 	temperature: 0.2,
 	maxTokens: 1200,
 	roleTags: ["attacker", "benign", "judge"],
+	provider: "openai-compat",
 };
 
 function ModelsPage() {
@@ -175,6 +188,24 @@ function ModelsPage() {
 								}
 							/>
 						</Field>
+						<Field label="Provider">
+							<select
+								className="border-input bg-background h-9 rounded-md border px-3 text-sm"
+								value={form.provider ?? "openai-compat"}
+								onChange={(event) =>
+									setForm({
+										...form,
+										provider: event.currentTarget.value as ModelProvider,
+									})
+								}
+							>
+								{PROVIDER_OPTIONS.map((option) => (
+									<option key={option.value} value={option.value}>
+										{option.label}
+									</option>
+								))}
+							</select>
+						</Field>
 						<div className="flex items-end gap-2 md:col-span-2">
 							<Button type="submit" disabled={saveModel.isPending}>
 								<SaveIcon data-icon="inline-start" />
@@ -207,6 +238,7 @@ function ModelsPage() {
 						<TableHeader>
 							<TableRow>
 								<TableHead>Name</TableHead>
+								<TableHead>Provider</TableHead>
 								<TableHead>Model</TableHead>
 								<TableHead>Endpoint</TableHead>
 								<TableHead>Env var</TableHead>
@@ -223,6 +255,9 @@ function ModelsPage() {
 								return (
 									<TableRow key={model.id}>
 										<TableCell>{model.name}</TableCell>
+										<TableCell>
+											<Badge variant="outline">{model.provider ?? "—"}</Badge>
+										</TableCell>
 										<TableCell>{model.modelName}</TableCell>
 										<TableCell>{model.baseUrl}</TableCell>
 										<TableCell>{model.apiKeyEnvVar}</TableCell>

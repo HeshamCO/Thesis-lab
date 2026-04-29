@@ -21,6 +21,7 @@ import type {
 	IntendedEffectLabel,
 	ModelConfig,
 	ModelConfigInput,
+	ModelProvider,
 	RetrievalSettings,
 	RunDetail,
 	RunListItem,
@@ -51,6 +52,17 @@ function id(prefix: string) {
 
 function stringify(value: unknown) {
 	return JSON.stringify(value ?? null);
+}
+
+// Heuristic fallback when an inserted/updated row arrives without an explicit provider.
+// Mirrors the SQL backfill in `backfillModelProviders`.
+function inferProviderFromBaseUrl(baseUrl: string): ModelProvider {
+	if (baseUrl.startsWith('http://localhost:8317')) return 'cliproxy';
+	if (baseUrl.startsWith('https://openrouter.ai/')) return 'openrouter';
+	if (baseUrl.startsWith('https://model.ssa.sa/') || baseUrl.startsWith('http://localhost:11434')) {
+		return 'ollama';
+	}
+	return 'openai-compat';
 }
 
 function parseJson<T>(value: unknown, fallback: T): T {
@@ -216,6 +228,7 @@ export class ThesisDb {
 				temperature REAL NOT NULL,
 				max_tokens INTEGER NOT NULL,
 				role_tags TEXT NOT NULL,
+				provider TEXT,
 				created_at TEXT NOT NULL,
 				updated_at TEXT NOT NULL
 			);
@@ -285,6 +298,9 @@ export class ThesisDb {
 				error TEXT NOT NULL,
 				raw_attacker_output TEXT NOT NULL DEFAULT '',
 				raw_attacker_parse_ok INTEGER NOT NULL DEFAULT 1,
+				injection_similarity INTEGER NOT NULL DEFAULT 0,
+				attacker_response_id TEXT NOT NULL DEFAULT '',
+				benign_response_id TEXT NOT NULL DEFAULT '',
 				attack_duration_ms INTEGER NOT NULL DEFAULT 0,
 				benign_duration_ms INTEGER NOT NULL DEFAULT 0,
 				total_duration_ms INTEGER NOT NULL DEFAULT 0,
@@ -408,6 +424,38 @@ export class ThesisDb {
 		this.addColumnIfMissing('runs', 'bulk_run_index', 'INTEGER');
 		this.addColumnIfMissing('runs', 'replica_index', 'INTEGER NOT NULL DEFAULT 0');
 		this.addColumnIfMissing('bulk_runs', 'bulk_run_group_id', 'TEXT');
+		// v2 BIPIA suite tagging — legacy rows default to 'v1' so existing flows are unaffected.
+		this.addColumnIfMissing('scenarios', 'suite', "TEXT NOT NULL DEFAULT 'v1'");
+		this.addColumnIfMissing('scenarios', 'attack_type_hint', 'TEXT');
+
+		// Provider migration: add nullable column and backfill from baseUrl heuristics.
+		// Idempotent — UPDATE only touches rows where provider IS NULL.
+		this.addColumnIfMissing('model_configs', 'provider', 'TEXT');
+		this.backfillModelProviders();
+
+		// Mode-collapse detection (Layer 3): track surface similarity to the prior attempt's
+		// injected_document. 0..100 (rounded char-bigram Jaccard × 100). Default 0 = no prior.
+		this.addColumnIfMissing('attempts', 'injection_similarity', 'INTEGER NOT NULL DEFAULT 0');
+		// Cache audit (Layer 4): persist upstream OpenAI-compatible response IDs so two identical
+		// IDs across attempts are a definitive cache hit. Empty string means not captured.
+		this.addColumnIfMissing('attempts', 'attacker_response_id', "TEXT NOT NULL DEFAULT ''");
+		this.addColumnIfMissing('attempts', 'benign_response_id', "TEXT NOT NULL DEFAULT ''");
+	}
+
+	private backfillModelProviders() {
+		this.db.exec(`
+			UPDATE model_configs SET provider = 'cliproxy'
+				WHERE provider IS NULL AND base_url LIKE 'http://localhost:8317%';
+			UPDATE model_configs SET provider = 'openrouter'
+				WHERE provider IS NULL AND base_url LIKE 'https://openrouter.ai/%';
+			UPDATE model_configs SET provider = 'ollama'
+				WHERE provider IS NULL AND (
+					base_url LIKE 'https://model.ssa.sa/%'
+					OR base_url LIKE 'http://localhost:11434%'
+				);
+			UPDATE model_configs SET provider = 'openai-compat'
+				WHERE provider IS NULL;
+		`);
 	}
 
 	private addColumnIfMissing(table: string, column: string, definition: string) {
@@ -602,7 +650,13 @@ export class ThesisDb {
 		}
 	}
 
-	listScenarios(): Scenario[] {
+	listScenarios(filter?: { suite?: string }): Scenario[] {
+		if (filter?.suite) {
+			return this.db
+				.prepare('SELECT * FROM scenarios WHERE suite = ? ORDER BY updated_at DESC')
+				.all(filter.suite)
+				.map((row) => this.hydrateScenario(row as SqlRow));
+		}
 		return this.db
 			.prepare('SELECT * FROM scenarios ORDER BY updated_at DESC')
 			.all()
@@ -621,8 +675,8 @@ export class ThesisDb {
 			this.db
 				.prepare(
 					`INSERT INTO scenarios
-					(id, name, description, benign_task, attacker_goal, retrieval_query, notes, created_at, updated_at)
-					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+					(id, name, description, benign_task, attacker_goal, retrieval_query, notes, suite, attack_type_hint, created_at, updated_at)
+					VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				)
 				.run(
 					scenarioId,
@@ -632,6 +686,8 @@ export class ThesisDb {
 					input.attackerGoal,
 					input.retrievalQuery,
 					input.notes,
+					input.suite ?? 'v1',
+					input.attackTypeHint ? JSON.stringify(input.attackTypeHint) : null,
 					timestamp,
 					timestamp,
 				);
@@ -652,7 +708,7 @@ export class ThesisDb {
 				.prepare(
 					`UPDATE scenarios SET
 					name = ?, description = ?, benign_task = ?, attacker_goal = ?,
-					retrieval_query = ?, notes = ?, updated_at = ?
+					retrieval_query = ?, notes = ?, suite = ?, attack_type_hint = ?, updated_at = ?
 					WHERE id = ?`,
 				)
 				.run(
@@ -662,6 +718,8 @@ export class ThesisDb {
 					input.attackerGoal,
 					input.retrievalQuery,
 					input.notes,
+					input.suite ?? 'v1',
+					input.attackTypeHint ? JSON.stringify(input.attackTypeHint) : null,
 					timestamp,
 					scenarioId,
 				);
@@ -697,8 +755,8 @@ export class ThesisDb {
 		this.db
 			.prepare(
 				`INSERT INTO model_configs
-				(id, name, base_url, model_name, api_key_env_var, temperature, max_tokens, role_tags, created_at, updated_at)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				(id, name, base_url, model_name, api_key_env_var, temperature, max_tokens, role_tags, provider, created_at, updated_at)
+				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			)
 			.run(
 				modelId,
@@ -709,6 +767,7 @@ export class ThesisDb {
 				input.temperature,
 				input.maxTokens,
 				stringify(input.roleTags),
+				input.provider ?? inferProviderFromBaseUrl(input.baseUrl),
 				timestamp,
 				timestamp,
 			);
@@ -724,7 +783,7 @@ export class ThesisDb {
 			.prepare(
 				`UPDATE model_configs SET
 				name = ?, base_url = ?, model_name = ?, api_key_env_var = ?,
-				temperature = ?, max_tokens = ?, role_tags = ?, updated_at = ?
+				temperature = ?, max_tokens = ?, role_tags = ?, provider = ?, updated_at = ?
 				WHERE id = ?`,
 			)
 			.run(
@@ -735,6 +794,7 @@ export class ThesisDb {
 				input.temperature,
 				input.maxTokens,
 				stringify(input.roleTags),
+				input.provider ?? inferProviderFromBaseUrl(input.baseUrl),
 				now(),
 				modelId,
 			);
@@ -815,6 +875,19 @@ export class ThesisDb {
 
 	deleteDefense(defenseId: string) {
 		this.db.prepare('DELETE FROM defense_configs WHERE id = ?').run(defenseId);
+	}
+
+	deleteBulkRun(bulkRunId: string) {
+		const runs = this.db.prepare('SELECT id FROM runs WHERE bulk_run_id = ?').all(bulkRunId) as { id: string }[];
+		const deleteRun = this.db.prepare('DELETE FROM runs WHERE id = ?');
+		for (const run of runs) deleteRun.run(run.id);
+		this.db.prepare('DELETE FROM bulk_runs WHERE id = ?').run(bulkRunId);
+	}
+
+	deleteSweep(sweepId: string) {
+		const bulks = this.db.prepare('SELECT id FROM bulk_runs WHERE bulk_run_group_id = ?').all(sweepId) as { id: string }[];
+		for (const bulk of bulks) this.deleteBulkRun(bulk.id);
+		this.db.prepare('DELETE FROM sweeps WHERE id = ?').run(sweepId);
 	}
 
 	createRun(input: {
@@ -1176,6 +1249,56 @@ export class ThesisDb {
 			.map((row) => this.hydrateToolCall(row as SqlRow));
 	}
 
+	// Layer 3: persist surface-similarity to the prior attempt's injected_document.
+	updateAttemptInjectionSimilarity(attemptId: string, similarity: number) {
+		const clamped = Math.max(0, Math.min(100, Math.round(similarity)));
+		this.db
+			.prepare(`UPDATE attempts SET injection_similarity = ? WHERE id = ?`)
+			.run(clamped, attemptId);
+	}
+
+	// Layer 4: persist upstream OpenAI-compatible response IDs for cache-audit.
+	updateAttemptResponseIds(
+		attemptId: string,
+		ids: { attackerResponseId?: string; benignResponseId?: string },
+	) {
+		if (ids.attackerResponseId !== undefined) {
+			this.db
+				.prepare(`UPDATE attempts SET attacker_response_id = ? WHERE id = ?`)
+				.run(ids.attackerResponseId, attemptId);
+		}
+		if (ids.benignResponseId !== undefined) {
+			this.db
+				.prepare(`UPDATE attempts SET benign_response_id = ? WHERE id = ?`)
+				.run(ids.benignResponseId, attemptId);
+		}
+	}
+
+	// Fetch the previous attempt's injected_document — used for similarity scoring.
+	// Returns null if this is attempt 1.
+	getPreviousInjectedDocument(runId: string, currentAttemptNumber: number): string | null {
+		if (currentAttemptNumber <= 1) return null;
+		const row = this.db
+			.prepare(
+				`SELECT injected_document FROM attempts
+				 WHERE run_id = ? AND attempt_number = ? LIMIT 1`,
+			)
+			.get(runId, currentAttemptNumber - 1) as { injected_document?: string } | undefined;
+		return row?.injected_document ?? null;
+	}
+
+	// Fetch the prior attempt's similarity score — used to detect two consecutive high-sim attempts.
+	getPreviousInjectionSimilarity(runId: string, currentAttemptNumber: number): number {
+		if (currentAttemptNumber <= 1) return 0;
+		const row = this.db
+			.prepare(
+				`SELECT injection_similarity FROM attempts
+				 WHERE run_id = ? AND attempt_number = ? LIMIT 1`,
+			)
+			.get(runId, currentAttemptNumber - 1) as { injection_similarity?: number } | undefined;
+		return Number(row?.injection_similarity ?? 0);
+	}
+
 	updateAttemptToolCallsCount(attemptId: string, count: number) {
 		this.db
 			.prepare('UPDATE attempts SET tool_calls_count = ? WHERE id = ?')
@@ -1447,6 +1570,11 @@ export class ThesisDb {
 				} satisfies ToolDefinitionInput;
 			});
 
+		const suiteValue = row.suite ? String(row.suite) : 'v1';
+		const suite: 'v1' | 'bipia' = suiteValue === 'bipia' ? 'bipia' : 'v1';
+		const attackTypeHint = row.attack_type_hint
+			? parseJson<{ name: string; description: string } | undefined>(row.attack_type_hint, undefined)
+			: undefined;
 		return {
 			id: scenarioId,
 			name: String(row.name),
@@ -1458,21 +1586,27 @@ export class ThesisDb {
 			documents,
 			successSteps,
 			tools,
+			suite,
+			...(attackTypeHint ? { attackTypeHint } : {}),
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};
 	}
 
 	private hydrateModel(row: SqlRow): ModelConfig {
+		const baseUrl = String(row.base_url);
+		const rawProvider = row.provider == null ? null : String(row.provider);
+		const provider = (rawProvider as ModelProvider | null) ?? inferProviderFromBaseUrl(baseUrl);
 		return {
 			id: String(row.id),
 			name: String(row.name),
-			baseUrl: String(row.base_url),
+			baseUrl,
 			modelName: String(row.model_name),
 			apiKeyEnvVar: String(row.api_key_env_var),
 			temperature: Number(row.temperature),
 			maxTokens: Number(row.max_tokens),
 			roleTags: parseJson<string[]>(row.role_tags, []),
+			provider,
 			createdAt: String(row.created_at),
 			updatedAt: String(row.updated_at),
 		};
@@ -1544,6 +1678,9 @@ export class ThesisDb {
 			error: String(row.error),
 			rawAttackerOutput: String(row.raw_attacker_output ?? ''),
 			rawAttackerParseOk: bool(row.raw_attacker_parse_ok ?? 1),
+			injectionSimilarity: Number(row.injection_similarity ?? 0),
+			attackerResponseId: String(row.attacker_response_id ?? ''),
+			benignResponseId: String(row.benign_response_id ?? ''),
 			attackDurationMs: Number(row.attack_duration_ms ?? 0),
 			benignDurationMs: Number(row.benign_duration_ms ?? 0),
 			totalDurationMs: Number(row.total_duration_ms ?? 0),

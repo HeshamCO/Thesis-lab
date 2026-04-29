@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { PlayIcon } from "lucide-react";
+import { PlayIcon, Trash2Icon } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
@@ -14,9 +14,11 @@ import { api } from "#/lib/thesis/api";
 import { filterModelsByRole } from "#/lib/thesis/model-roles";
 import { queryKeys } from "#/lib/thesis/query";
 import {
+	ATTACKER_PROMPT_VERSIONS,
 	DEFAULT_ATTACKER_PROMPT_VERSION,
 	DEFAULT_BENIGN_PROMPT_VERSION,
 	DEFAULT_JUDGE_PROMPT_VERSION,
+	JUDGE_PROMPT_VERSIONS,
 	type BulkRunInput,
 } from "#/lib/thesis/schemas";
 
@@ -29,6 +31,7 @@ type FactorSelections = {
 	defenseConfigId: string[];
 	maxAttempts: number[];
 	attackerPromptVersion: string[];
+	judgePromptVersion: string[];
 };
 
 function SweepsPage() {
@@ -47,10 +50,22 @@ function SweepsPage() {
 		defenseConfigId: [],
 		maxAttempts: [],
 		attackerPromptVersion: [],
+		judgePromptVersion: [],
 	});
 	const [replicas, setReplicas] = useState(1);
 	const [maxAttemptsBase, setMaxAttemptsBase] = useState(5);
+	const [concurrencyBase, setConcurrencyBase] = useState(1);
 	const [scenarioIds, setScenarioIds] = useState<string[]>([]);
+
+	const deleteSweep = useMutation({
+		mutationFn: api.deleteSweep,
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.sweeps });
+			queryClient.invalidateQueries({ queryKey: queryKeys.bulkRuns });
+			toast.success("Sweep deleted.");
+		},
+		onError: (error) => toast.error(error.message),
+	});
 
 	const createSweep = useMutation({
 		mutationFn: api.createSweep,
@@ -71,6 +86,7 @@ function SweepsPage() {
 		factors.defenseConfigId.length > 1 ? `defense×${factors.defenseConfigId.length}` : null,
 		factors.maxAttempts.length > 1 ? `maxAttempts×${factors.maxAttempts.length}` : null,
 		factors.attackerPromptVersion.length > 1 ? `attackerPrompt×${factors.attackerPromptVersion.length}` : null,
+		factors.judgePromptVersion.length > 1 ? `judgePrompt×${factors.judgePromptVersion.length}` : null,
 	].filter((v) => v !== null);
 	const cellEstimate =
 		Math.max(1, factors.attackerModelId.length) *
@@ -78,7 +94,8 @@ function SweepsPage() {
 		Math.max(1, factors.judgeModelId.length) *
 		Math.max(1, factors.defenseConfigId.length) *
 		Math.max(1, factors.maxAttempts.length) *
-		Math.max(1, factors.attackerPromptVersion.length);
+		Math.max(1, factors.attackerPromptVersion.length) *
+		Math.max(1, factors.judgePromptVersion.length);
 
 	const submit = () => {
 		const firstAttacker = factors.attackerModelId[0] ?? models.data?.[0]?.id ?? "";
@@ -100,11 +117,14 @@ function SweepsPage() {
 			attackerPromptVersion: (factors.attackerPromptVersion[0] ??
 				DEFAULT_ATTACKER_PROMPT_VERSION) as BulkRunInput["attackerPromptVersion"],
 			benignPromptVersion: DEFAULT_BENIGN_PROMPT_VERSION,
-			judgePromptVersion: DEFAULT_JUDGE_PROMPT_VERSION,
-			benignTaskHasSafetyClause: true,
+			judgePromptVersion: (factors.judgePromptVersion[0] ??
+				DEFAULT_JUDGE_PROMPT_VERSION) as BulkRunInput["judgePromptVersion"],
+			benignTaskHasSafetyClause: false,
 			labelRetrievedDocuments: false,
 			structuredBenignOutput: true,
 			replicas,
+			concurrency: concurrencyBase,
+			perModelConcurrency: 4,
 		};
 		createSweep.mutate({
 			name,
@@ -119,6 +139,10 @@ function SweepsPage() {
 				attackerPromptVersion:
 					factors.attackerPromptVersion.length > 0
 						? (factors.attackerPromptVersion as Array<BulkRunInput["attackerPromptVersion"]>)
+						: undefined,
+				judgePromptVersion:
+					factors.judgePromptVersion.length > 0
+						? (factors.judgePromptVersion as Array<BulkRunInput["judgePromptVersion"]>)
 						: undefined,
 			},
 		});
@@ -148,7 +172,7 @@ function SweepsPage() {
 					</CardDescription>
 				</CardHeader>
 				<CardContent className="flex flex-col gap-4">
-					<div className="grid gap-3 md:grid-cols-3">
+					<div className="grid gap-3 md:grid-cols-4">
 						<div className="flex flex-col gap-1">
 							<Label>Name</Label>
 							<Input value={name} onChange={(e) => setName(e.target.value)} />
@@ -171,6 +195,16 @@ function SweepsPage() {
 								max={50}
 								value={maxAttemptsBase}
 								onChange={(e) => setMaxAttemptsBase(Number(e.target.value) || 1)}
+							/>
+						</div>
+						<div className="flex flex-col gap-1">
+							<Label>Concurrency per cell</Label>
+							<Input
+								type="number"
+								min={1}
+								max={8}
+								value={concurrencyBase}
+								onChange={(e) => setConcurrencyBase(Math.max(1, Math.min(8, Number(e.target.value) || 1)))}
 							/>
 						</div>
 					</div>
@@ -207,13 +241,24 @@ function SweepsPage() {
 					/>
 					<FactorPicker
 						title="Attacker prompt version"
-						options={["attacker@v3", "attacker@v4"].map((v) => ({ label: v, value: v }))}
+						options={ATTACKER_PROMPT_VERSIONS.map((v) => ({ label: v, value: v }))}
 						selected={factors.attackerPromptVersion}
 						onToggle={(v) => toggle("attackerPromptVersion", v as string)}
 					/>
+					<FactorPicker
+						title="Judge prompt version"
+						options={JUDGE_PROMPT_VERSIONS.map((v) => ({ label: v, value: v }))}
+						selected={factors.judgePromptVersion}
+						onToggle={(v) => toggle("judgePromptVersion", v as string)}
+					/>
 
 					<div className="flex flex-col gap-2">
-						<Label>Scenarios ({scenarioIds.length === 0 ? "all" : scenarioIds.length} selected)</Label>
+						<div className="flex items-center justify-between">
+							<Label>Scenarios ({scenarioIds.length === 0 ? "all" : scenarioIds.length} selected)</Label>
+							<Button type="button" variant="outline" size="sm" onClick={() => setScenarioIds([])}>
+								Select all
+							</Button>
+						</div>
 						<div className="grid gap-2 rounded-md border border-border/50 p-3 md:grid-cols-2 max-h-64 overflow-auto">
 							{(scenarios.data ?? []).map((scenario) => {
 								const selected = scenarioIds.length === 0 || scenarioIds.includes(scenario.id);
@@ -223,6 +268,11 @@ function SweepsPage() {
 											checked={selected}
 											onCheckedChange={() =>
 												setScenarioIds((ids) => {
+													if (ids.length === 0) {
+														// currently "all" — deselect this one by explicitly listing others
+														const all = (scenarios.data ?? []).map((s) => s.id);
+														return all.filter((id) => id !== scenario.id);
+													}
 													const set = new Set(ids);
 													if (set.has(scenario.id)) set.delete(scenario.id);
 													else set.add(scenario.id);
@@ -261,6 +311,7 @@ function SweepsPage() {
 							<TableRow>
 								<TableHead>Name</TableHead>
 								<TableHead>Created</TableHead>
+								<TableHead className="w-8" />
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -272,11 +323,26 @@ function SweepsPage() {
 										</Link>
 									</TableCell>
 									<TableCell>{new Date(sweep.createdAt).toLocaleString()}</TableCell>
+									<TableCell>
+										<Button
+											size="icon"
+											variant="ghost"
+											className="h-7 w-7 text-destructive hover:text-destructive"
+											disabled={deleteSweep.isPending}
+											onClick={() => {
+												if (window.confirm(`Delete sweep "${sweep.name}" and all its bulk runs?`)) {
+													deleteSweep.mutate(sweep.id);
+												}
+											}}
+										>
+											<Trash2Icon className="h-4 w-4" />
+										</Button>
+									</TableCell>
 								</TableRow>
 							))}
 							{sweeps.data && sweeps.data.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={2} className="text-center text-muted-foreground">
+									<TableCell colSpan={3} className="text-center text-muted-foreground">
 										No sweeps yet.
 									</TableCell>
 								</TableRow>

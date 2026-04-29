@@ -59,8 +59,9 @@ app.get("/api/dashboard", (_request, response) => {
 	});
 });
 
-app.get("/api/scenarios", (_request, response) => {
-	response.json(thesisDb.listScenarios());
+app.get("/api/scenarios", (request, response) => {
+	const suiteParam = typeof request.query.suite === "string" ? request.query.suite : undefined;
+	response.json(thesisDb.listScenarios(suiteParam ? { suite: suiteParam } : undefined));
 });
 
 app.post("/api/scenarios", (request, response) => {
@@ -147,6 +148,7 @@ app.get("/api/prompts", (_request, response) => {
 			labelRetrievedDocuments: false,
 			toolsAvailable: true,
 			structuredBenignOutput: true,
+			attemptNumber: 1,
 		});
 		return { id: prompt.id, description: prompt.description, system: built.system, user: built.user };
 	});
@@ -207,6 +209,16 @@ app.put("/api/defenses/:id", (request, response) => {
 
 app.delete("/api/defenses/:id", (request, response) => {
 	thesisDb.deleteDefense(request.params.id);
+	response.status(204).end();
+});
+
+app.delete("/api/bulk-runs/:id", (request, response) => {
+	thesisDb.deleteBulkRun(request.params.id);
+	response.status(204).end();
+});
+
+app.delete("/api/sweeps/:id", (request, response) => {
+	thesisDb.deleteSweep(request.params.id);
 	response.status(204).end();
 });
 
@@ -304,6 +316,8 @@ function buildBulkRun(
 			structuredBenignOutput: input.structuredBenignOutput,
 			replicas,
 			shuffleSeed,
+			concurrency: input.concurrency,
+			perModelConcurrency: input.perModelConcurrency,
 		},
 	});
 
@@ -372,7 +386,8 @@ app.get("/api/bulk-runs/:id", (request, response) => {
 	const runs = thesisDb.listRunsByBulkRun(bulk.id);
 	const attempts = runs.flatMap((run) => thesisDb.getRun(run.id).attempts);
 	const dashboard = computeBulkRunDashboard(bulk, runs, attempts);
-	response.json({ bulkRun: bulk, runs, dashboard });
+	const activeCount = engine.getActiveCountForBulk(bulk.id);
+	response.json({ bulkRun: bulk, runs, dashboard, activeCount });
 });
 
 app.post("/api/bulk-runs/:id/resume-failed", (request, response) => {

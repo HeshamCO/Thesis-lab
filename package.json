@@ -21,6 +21,7 @@
     "seed:openrouter": "bun run server/seed-openrouter.ts",
     "seed:cliproxy": "bun run server/seed-cliproxy.ts",
     "seed:scenarios": "bun run server/seed-scenarios.ts",
+    "seed:bipia-scenarios": "bun run server/seed-bipia-scenarios.ts --dumped-limit 30",
     "db:reset": "bun run server/reset-db.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

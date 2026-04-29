@@ -1,6 +1,5 @@
-import OpenAI from "openai";
 import type { ModelConfig, ModelConnectionResult } from "../src/lib/thesis/schemas";
-import { resolveApiKey } from "./model-api";
+import { createOpenAIClient, resolveApiKey } from "./model-api";
 
 export async function testModelConnection(model: ModelConfig): Promise<ModelConnectionResult> {
 	const startedAt = Date.now();
@@ -18,11 +17,7 @@ export async function testModelConnection(model: ModelConfig): Promise<ModelConn
 	}
 
 	try {
-		const client = new OpenAI({
-			apiKey,
-			baseURL: model.baseUrl,
-			timeout: 30_000,
-		});
+		const client = createOpenAIClient(model, { apiKey, timeout: 30_000 });
 		const baseBody = {
 			model: model.modelName,
 			temperature: 0,

@@ -29,7 +29,7 @@ import {
 	type ToolDefinitionInput,
 } from "../src/lib/thesis/schemas";
 import type { RetrievedDocument, ThesisDb } from "./db";
-import { resolveApiKey } from "./model-api";
+import { createOpenAIClient, resolveApiKey } from "./model-api";
 import {
 	type AttemptHistoryEntry,
 	type BenignStructuredOutput,
@@ -39,7 +39,13 @@ import {
 	getJudgePrompt,
 } from "./prompts";
 import { resolveCallParams } from "./models/resolver";
+import { injectionSimilarityScore } from "./text-similarity";
 import { executeTool } from "./tool-executor";
+
+// Layer 3: when the new attempt and the previous one both score above this threshold for
+// surface similarity, we emit an `attacker_mode_collapse_detected` warning. 70 is conservative
+// — empirically run_e12abffb (the failure that prompted this instrumentation) ran at 85+.
+const MODE_COLLAPSE_SIMILARITY_THRESHOLD = 70;
 
 const MAX_TOOL_TURNS = 8;
 type ToolEvaluatorType = (typeof TOOL_EVALUATOR_TYPES)[number];
@@ -56,6 +62,8 @@ type BenignTaskResult = {
 	systemPrompt: string;
 	userPrompt: string;
 	tokensUsed: number;
+	// Layer 4: most-recent upstream response id from the benign call (last call wins on tool loops).
+	responseId: string;
 };
 
 type AttackerOutput = {
@@ -74,6 +82,9 @@ type AttackerOutput = {
 	systemPrompt: string;
 	userPrompt: string;
 	tokensUsed: number;
+	// Layer 4: upstream OpenAI-compatible response ID. Empty if mock fallback fired or the
+	// upstream omitted the field. Two attempts with the same id = a definitive cache hit.
+	responseId: string;
 };
 
 type JudgeOutput = {
@@ -91,24 +102,35 @@ type DefenseDiff = {
 };
 
 export class ExperimentEngine {
-	private activeRunId: string | null = null;
+	// Concurrency bookkeeping. Per-bulk active set + per-model active counts so the engine
+	// can fan out runs in parallel up to the bulk's `concurrency` and each model's
+	// `perModelConcurrency` cap. Solo (non-bulk) runs still serialize against `soloRunId`.
+	private soloRunId: string | null = null;
+	private activeBulkRuns = new Map<string, Set<string>>(); // bulkId → set of runIds in flight
+	private activeModelCalls = new Map<string, number>(); // modelId → in-flight count
 
 	constructor(
 		private db: ThesisDb,
 		private io: SocketServer,
 	) {}
 
-	start(runId: string) {
-		if (this.activeRunId && this.activeRunId !== runId) {
-			throw new Error("Only one active run is supported in v1.");
-		}
-
-		this.activeRunId = runId;
-		void this.execute(runId).finally(() => {
-			if (this.activeRunId === runId) {
-				this.activeRunId = null;
+	// Public entry. Honors per-bulk concurrency: when called for a run that's part of a bulk,
+	// the bulk's queued siblings will fan out automatically as slots free up.
+	start(runId: string): void {
+		const run = this.db.getRun(runId);
+		const bulkRunId = run.bulkRunId;
+		if (!bulkRunId) {
+			if (this.soloRunId && this.soloRunId !== runId) {
+				throw new Error("Only one solo (non-bulk) run is supported.");
 			}
-		});
+			this.soloRunId = runId;
+			void this.execute(runId).finally(() => {
+				if (this.soloRunId === runId) this.soloRunId = null;
+			});
+			return;
+		}
+		// Bulk run: route through advanceBulk so concurrency + per-model gating applies.
+		this.advanceBulk(bulkRunId);
 	}
 
 	resume(runId: string) {
@@ -116,6 +138,11 @@ export class ExperimentEngine {
 		this.db.updateRunStatus(runId, "queued");
 		this.log(runId, "info", "run.resume", "Run resume requested.", {});
 		this.start(runId);
+	}
+
+	// How many runs are currently in flight for a given bulk. Used by the dashboard chip.
+	getActiveCountForBulk(bulkRunId: string): number {
+		return this.activeBulkRuns.get(bulkRunId)?.size ?? 0;
 	}
 
 	private async execute(runId: string) {
@@ -154,7 +181,6 @@ export class ExperimentEngine {
 						attemptNumber: nextAttempt,
 					});
 					this.emitRun(runId, true);
-					this.advanceBulkRun(bulkRunId);
 					return;
 				}
 
@@ -168,32 +194,74 @@ export class ExperimentEngine {
 				maxAttempts: run.maxAttempts,
 			});
 			this.emitRun(runId, true);
-			this.advanceBulkRun(bulkRunId);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : "Run failed.";
 			this.db.updateRunStatus(runId, "failed", message);
 			this.log(runId, "error", "run.failed", message, {});
 			this.emitRun(runId, true);
-			this.advanceBulkRun(bulkRunId);
 		}
 	}
 
-	private advanceBulkRun(bulkRunId: string | null) {
+	// Fan out queued runs in a bulk up to its `concurrency`, gated by per-model caps. Called
+	// at bulk start (via `start(runId)`) and after every run completes/fails. Idempotent.
+	private advanceBulk(bulkRunId: string | null): void {
 		if (!bulkRunId) return;
-		const next = this.db.getNextQueuedRunInBulk(bulkRunId);
-		if (next) {
-			setTimeout(() => this.start(next), 0);
-			return;
+		const bulk = this.db.getBulkRun(bulkRunId);
+		if (!bulk) return;
+		const concurrency = Math.max(1, bulk.config.concurrency ?? 1);
+		const perModelCap = Math.max(1, bulk.config.perModelConcurrency ?? 4);
+		const active = this.activeBulkRuns.get(bulkRunId) ?? new Set<string>();
+		this.activeBulkRuns.set(bulkRunId, active);
+
+		// Try to fill all available slots; pull queued runs one at a time and gate per-model.
+		while (active.size < concurrency) {
+			const nextRunId = this.db.getNextQueuedRunInBulk(bulkRunId);
+			if (!nextRunId) break;
+			const nextRun = this.db.getRun(nextRunId);
+			const modelIds = this.modelIdsForRun(nextRun);
+			const blocked = modelIds.find((m) => (this.activeModelCalls.get(m) ?? 0) >= perModelCap);
+			if (blocked) {
+				// At cap for one of this run's models; wait for a release. Some other in-flight
+				// run will call advanceBulk again on completion and we'll re-evaluate.
+				break;
+			}
+			// Acquire all per-model slots + the bulk slot, then launch.
+			for (const m of modelIds) this.activeModelCalls.set(m, (this.activeModelCalls.get(m) ?? 0) + 1);
+			active.add(nextRunId);
+			if (bulk.status !== "running") this.db.updateBulkRunStatus(bulkRunId, "running");
+			void this.execute(nextRunId).finally(() => {
+				active.delete(nextRunId);
+				for (const m of modelIds) {
+					const remaining = (this.activeModelCalls.get(m) ?? 1) - 1;
+					if (remaining <= 0) this.activeModelCalls.delete(m);
+					else this.activeModelCalls.set(m, remaining);
+				}
+				// A slot freed — try to refill.
+				this.advanceBulk(bulkRunId);
+			});
 		}
-		this.db.updateBulkRunStatus(bulkRunId, "completed");
-		const groupId = this.db.getBulkRunGroupId(bulkRunId);
-		if (groupId) {
-			const nextBulk = this.db.getNextQueuedBulkInGroup(groupId);
-			if (nextBulk) {
-				const firstRun = this.db.getFirstRunInBulk(nextBulk);
-				if (firstRun) setTimeout(() => this.start(firstRun), 0);
+
+		// If nothing is running and nothing is queued, the bulk is finished.
+		if (active.size === 0) {
+			const stillQueued = this.db.getNextQueuedRunInBulk(bulkRunId);
+			if (!stillQueued) {
+				this.db.updateBulkRunStatus(bulkRunId, "completed");
+				this.activeBulkRuns.delete(bulkRunId);
+				const groupId = this.db.getBulkRunGroupId(bulkRunId);
+				if (groupId) {
+					const nextBulk = this.db.getNextQueuedBulkInGroup(groupId);
+					if (nextBulk) setTimeout(() => this.advanceBulk(nextBulk), 0);
+				}
 			}
 		}
+	}
+
+	private modelIdsForRun(run: { attackerModelSnapshot: { id: string }; benignModelSnapshot: { id: string }; judgeModelSnapshot?: { id: string } | null }): string[] {
+		const ids = new Set<string>();
+		if (run.attackerModelSnapshot?.id) ids.add(run.attackerModelSnapshot.id);
+		if (run.benignModelSnapshot?.id) ids.add(run.benignModelSnapshot.id);
+		if (run.judgeModelSnapshot?.id) ids.add(run.judgeModelSnapshot.id);
+		return [...ids];
 	}
 
 	private async executeAttempt(
@@ -249,6 +317,31 @@ export class ExperimentEngine {
 		});
 		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "attacker_system_prompt", attackerOutput.systemPrompt);
 		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "attacker_user_prompt", attackerOutput.userPrompt);
+
+		// Layer 3: surface-similarity vs the previous attempt's injected_document. Two consecutive
+		// attempts above MODE_COLLAPSE_SIMILARITY_THRESHOLD are flagged as `attacker_mode_collapse_detected`
+		// — visible in run logs so wasted attempts stop happening silently.
+		const previousInjectedDocument = this.db.getPreviousInjectedDocument(run.id, attemptNumber);
+		const injectionSim = injectionSimilarityScore(previousInjectedDocument, attackerOutput.injectedDocument);
+		this.db.updateAttemptInjectionSimilarity(attempt.id, injectionSim);
+		// Capture upstream attacker response id (Layer 4) — empty string if mock fallback fired.
+		if (attackerOutput.responseId) {
+			this.db.updateAttemptResponseIds(attempt.id, { attackerResponseId: attackerOutput.responseId });
+		}
+
+		if (injectionSim >= MODE_COLLAPSE_SIMILARITY_THRESHOLD) {
+			const previousSim = this.db.getPreviousInjectionSimilarity(run.id, attemptNumber);
+			const consecutive = previousSim >= MODE_COLLAPSE_SIMILARITY_THRESHOLD;
+			this.log(
+				run.id,
+				consecutive ? "warn" : "info",
+				consecutive ? "attacker_mode_collapse_detected" : "attacker.high_similarity",
+				consecutive
+					? `Attacker reproduced the prior document's surface form (${injectionSim}/100, prior=${previousSim}/100). Two consecutive high-similarity attempts — change attacker model, raise temperature, or rotate the document genre.`
+					: `Attacker output is highly similar to the previous attempt (${injectionSim}/100). Watch for mode-collapse on the next attempt.`,
+				{ attemptNumber, similarity: injectionSim, previousSimilarity: previousSim, threshold: MODE_COLLAPSE_SIMILARITY_THRESHOLD },
+			);
+		}
 		this.emit("attempt:update", run.id, attempt);
 
 		const retrievalQuery = run.retrievalSettings.query || run.scenarioSnapshot.retrievalQuery;
@@ -304,6 +397,10 @@ export class ExperimentEngine {
 		const benign = await this.runBenignTask(run, attempt.id, attemptNumber, retrievedContext);
 		const benignDurationMs = Date.now() - benignStartedAt;
 		this.db.updateAttemptTokens(attempt.id, attackerOutput.tokensUsed, benign.tokensUsed);
+		// Layer 4: persist benign response id for cache-audit (empty if mock fallback fired).
+		if (benign.responseId) {
+			this.db.updateAttemptResponseIds(attempt.id, { benignResponseId: benign.responseId });
+		}
 		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "benign_system_prompt", benign.systemPrompt);
 		this.recordPromptArtifact(run.id, attempt.id, attemptNumber, "benign_user_prompt", benign.userPrompt);
 		this.log(run.id, "info", "benign.responded", "Benign model produced a response.", {
@@ -418,16 +515,23 @@ export class ExperimentEngine {
 		const promptVersion = getAttackerPrompt(run.attackerPromptVersion);
 		const retrievalQuery = run.retrievalSettings.query || run.scenarioSnapshot.retrievalQuery;
 		const history = this.buildAttackerHistory(run);
+		// attackTypeHint is opt-in (BIPIA v2 scenarios populate it; v1 leaves it undefined and v6
+		// behaves identically to v5 without the BIPIA family constraint).
+		const attackTypeHint = (run.scenarioSnapshot as { attackTypeHint?: { name: string; description: string } })
+			.attackTypeHint;
 		const built = promptVersion.build({
 			scenario: run.scenarioSnapshot,
 			attemptNumber,
 			history,
 			previousFeedback,
 			retrievalQuery,
+			attackTypeHint,
 		});
 		const usage = await this.callModelWithUsage(run.attackerModelSnapshot, { ...built, role: "attacker" });
 		let content = usage.content;
 		let tokensUsed = usage.totalTokens;
+		// Use the most recent response id (last call wins on retry).
+		let responseId = usage.responseId;
 
 		// If the attacker refused or produced non-JSON, retry once with a JSON-forcing assistant prefill.
 		// Claude/GPT-5 will usually continue from an open `{` even if they refused on the first pass.
@@ -446,6 +550,7 @@ export class ExperimentEngine {
 			const retryRefusal = detectAttackerRefusal(retry.content);
 			if (retry.content && !retryRefusal) {
 				content = retry.content.startsWith("{") ? retry.content : `{"strategy":"${retry.content}`;
+				responseId = retry.responseId || responseId;
 			}
 			tokensUsed += retry.totalTokens;
 		}
@@ -466,6 +571,7 @@ export class ExperimentEngine {
 			systemPrompt: built.system ?? "",
 			userPrompt: built.user,
 			tokensUsed,
+			responseId,
 		};
 	}
 
@@ -535,26 +641,31 @@ export class ExperimentEngine {
 			labelRetrievedDocuments: run.labelRetrievedDocuments,
 			toolsAvailable: exposedTools.length > 0,
 			structuredBenignOutput: useStructured,
+			attemptNumber,
 		});
 
 		const prompts = { systemPrompt: built.system ?? "", userPrompt: built.user };
 		if (exposedTools.length === 0) {
 			const usage = await this.callModelWithUsage(run.benignModelSnapshot, { ...built, role: "benign" });
-			return finishBenignResult(usage.content, [], useStructured, prompts, usage.totalTokens);
+			return finishBenignResult(usage.content, [], useStructured, prompts, usage.totalTokens, usage.responseId);
 		}
 
 		const messages = buildMessages(built);
 		const toolSpec = exposedTools.map(toOpenAITool);
 		const recordedCalls: ToolCallRecord[] = [];
 		let benignTokens = 0;
+		// Layer 4: track the most-recent response id across the tool loop. The final answer
+		// (whichever turn closes the loop) is the one we persist for cache-audit.
+		let benignResponseId = "";
 
 		for (let turn = 0; turn < MAX_TOOL_TURNS; turn += 1) {
 			const message = await this.callBenignWithTools(run.benignModelSnapshot, messages, toolSpec);
 			benignTokens += message.tokensUsed;
+			if (message.responseId) benignResponseId = message.responseId;
 			messages.push(message.assistant);
 
 			if (!message.toolCalls.length) {
-				return finishBenignResult(message.text, recordedCalls, useStructured, prompts, benignTokens);
+				return finishBenignResult(message.text, recordedCalls, useStructured, prompts, benignTokens, benignResponseId);
 			}
 
 			for (const call of message.toolCalls) {
@@ -644,7 +755,7 @@ export class ExperimentEngine {
 			| undefined;
 		const fallbackText =
 			typeof lastAssistant?.content === "string" ? lastAssistant.content : "";
-		return finishBenignResult(fallbackText, recordedCalls, useStructured, prompts, benignTokens);
+		return finishBenignResult(fallbackText, recordedCalls, useStructured, prompts, benignTokens, benignResponseId);
 	}
 
 	private async callBenignWithTools(
@@ -656,12 +767,13 @@ export class ExperimentEngine {
 		text: string;
 		toolCalls: ChatCompletionMessageFunctionToolCall[];
 		tokensUsed: number;
+		responseId: string;
 	}> {
 		const apiKey = resolveApiKey(model);
 		if (!apiKey) {
-			return { ...this.mockBenignWithTools(messages, tools), tokensUsed: 0 };
+			return { ...this.mockBenignWithTools(messages, tools), tokensUsed: 0, responseId: "" };
 		}
-		const client = new OpenAI({ apiKey, baseURL: model.baseUrl });
+		const client = createOpenAIClient(model, { apiKey });
 		const resolved = resolveCallParams(model.modelName, "benign", {
 			temperature: model.temperature,
 			maxTokens: model.maxTokens,
@@ -682,7 +794,7 @@ export class ExperimentEngine {
 			content: text,
 			...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
 		};
-		return { assistant, text, toolCalls, tokensUsed: response.usage?.total_tokens ?? 0 };
+		return { assistant, text, toolCalls, tokensUsed: response.usage?.total_tokens ?? 0, responseId: response.id ?? "" };
 	}
 
 	private mockBenignWithTools(
@@ -893,7 +1005,7 @@ export class ExperimentEngine {
 	private async callModelWithUsage(
 		model: ModelConfig,
 		args: { system?: string; user: string; role: "attacker" | "benign" | "judge"; assistantPrefill?: string },
-	): Promise<{ content: string; promptTokens: number; completionTokens: number; totalTokens: number }> {
+	): Promise<{ content: string; promptTokens: number; completionTokens: number; totalTokens: number; responseId: string }> {
 		const apiKey = resolveApiKey(model);
 		if (!apiKey) {
 			return {
@@ -901,6 +1013,7 @@ export class ExperimentEngine {
 				promptTokens: 0,
 				completionTokens: 0,
 				totalTokens: 0,
+				responseId: "",
 			};
 		}
 
@@ -908,10 +1021,7 @@ export class ExperimentEngine {
 		if (args.assistantPrefill) {
 			messages.push({ role: "assistant", content: args.assistantPrefill });
 		}
-		const client = new OpenAI({
-			apiKey,
-			baseURL: model.baseUrl,
-		});
+		const client = createOpenAIClient(model, { apiKey });
 		const resolved = resolveCallParams(model.modelName, args.role, {
 			temperature: model.temperature,
 			maxTokens: model.maxTokens,
@@ -928,6 +1038,9 @@ export class ExperimentEngine {
 			promptTokens: usage?.prompt_tokens ?? 0,
 			completionTokens: usage?.completion_tokens ?? 0,
 			totalTokens: usage?.total_tokens ?? 0,
+			// Layer 4: capture upstream response id. OpenAI/OpenRouter set this; some Ollama
+			// versions don't. Empty string is fine — means "not captured for this provider".
+			responseId: response.id ?? "",
 		};
 	}
 
@@ -1223,7 +1336,10 @@ function parseAttackerOutput(
 				typeof parsed.rationale === "string"
 					? parsed.rationale
 					: "Model did not provide rationale.",
-			strategy: typeof parsed.strategy === "string" ? parsed.strategy : "",
+			strategy:
+				typeof parsed.strategy === "string" && parsed.strategy.trim().length > 0
+					? parsed.strategy.trim()
+					: "(unspecified)",
 			intendedEffect: coerceLabel(parsed.intendedEffect, INTENDED_EFFECTS, "unspecified"),
 			expectedTrigger: coerceLabel(parsed.expectedTrigger, EXPECTED_TRIGGERS, "unspecified"),
 			stealthLevel: coerceLabel(parsed.stealthLevel, STEALTH_LEVELS, "unspecified"),
@@ -1235,6 +1351,7 @@ function parseAttackerOutput(
 			systemPrompt: "",
 			userPrompt: "",
 			tokensUsed: 0,
+			responseId: "",
 		};
 	} catch {
 		return {
@@ -1253,6 +1370,7 @@ function parseAttackerOutput(
 			systemPrompt: "",
 			userPrompt: "",
 			tokensUsed: 0,
+			responseId: "",
 		};
 	}
 }
@@ -1298,6 +1416,7 @@ function finishBenignResult(
 	useStructured: boolean,
 	prompts: { systemPrompt: string; userPrompt: string },
 	tokensUsed = 0,
+	responseId = "",
 ): BenignTaskResult {
 	if (!useStructured) {
 		return {
@@ -1308,6 +1427,7 @@ function finishBenignResult(
 			systemPrompt: prompts.systemPrompt,
 			userPrompt: prompts.userPrompt,
 			tokensUsed,
+			responseId,
 		};
 	}
 	const parsed = parseStructuredBenignOutput(text);
@@ -1319,6 +1439,7 @@ function finishBenignResult(
 		systemPrompt: prompts.systemPrompt,
 		userPrompt: prompts.userPrompt,
 		tokensUsed,
+		responseId,
 	};
 }
 

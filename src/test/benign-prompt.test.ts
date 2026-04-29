@@ -25,6 +25,7 @@ describe("benign prompt rendering", () => {
 			labelRetrievedDocuments: true,
 			toolsAvailable: false,
 			structuredBenignOutput: false,
+			attemptNumber: 1,
 		});
 
 		expect(prompt.user).toContain('<doc id="1" label="Document 1">');
@@ -58,6 +59,7 @@ describe("benign prompt rendering", () => {
 			labelRetrievedDocuments: true,
 			toolsAvailable: false,
 			structuredBenignOutput: false,
+			attemptNumber: 1,
 		});
 
 		expect(prompt.user).toContain("[1] Document 1");

@@ -1,6 +1,6 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { DownloadIcon, RefreshCwIcon } from "lucide-react";
+import { DownloadIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
@@ -23,6 +23,7 @@ export const Route = createFileRoute("/bulk-runs/$bulkRunId")({ component: BulkR
 
 function BulkRunDashboard() {
 	const { bulkRunId } = Route.useParams();
+	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const query = useQuery({
 		queryKey: queryKeys.bulkRun(bulkRunId),
@@ -40,11 +41,21 @@ function BulkRunDashboard() {
 		},
 		onError: (error) => toast.error(error.message),
 	});
+	const deleteBulk = useMutation({
+		mutationFn: () => api.deleteBulkRun(bulkRunId),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.bulkRuns });
+			toast.success("Bulk run deleted.");
+			navigate({ to: "/bulk-runs" });
+		},
+		onError: (error) => toast.error(error.message),
+	});
 
 	if (query.isLoading) return <p className="p-4">Loading…</p>;
 	if (!query.data) return <p className="p-4">Bulk run not found.</p>;
 
-	const { bulkRun, runs, dashboard } = query.data;
+	const { bulkRun, runs, dashboard, activeCount } = query.data;
+	const concurrencyConfigured = bulkRun.config.concurrency ?? 1;
 	const progress =
 		dashboard.totalRuns > 0
 			? ((dashboard.completedRuns + dashboard.failedRuns) / dashboard.totalRuns) * 100
@@ -150,7 +161,7 @@ function BulkRunDashboard() {
 		<>
 			<PageHeading
 				title={bulkRun.name}
-				description={`Status: ${bulkRun.status} · ${dashboard.totalRuns} scenarios · replicas=${bulkRun.config.replicas ?? 1} · seed=${bulkRun.config.shuffleSeed ?? "?"} · created ${new Date(bulkRun.createdAt).toLocaleString()}`}
+				description={`Status: ${bulkRun.status} · ${dashboard.totalRuns} scenarios · replicas=${bulkRun.config.replicas ?? 1} · concurrency=${concurrencyConfigured} (active=${activeCount}) · seed=${bulkRun.config.shuffleSeed ?? "?"} · created ${new Date(bulkRun.createdAt).toLocaleString()}`}
 			/>
 
 			<div className="flex flex-wrap gap-2">
@@ -172,6 +183,19 @@ function BulkRunDashboard() {
 				>
 					<RefreshCwIcon data-icon="inline-start" />
 					Resume failed ({failedRuns.length})
+				</Button>
+				<Button
+					size="sm"
+					variant="destructive"
+					disabled={deleteBulk.isPending}
+					onClick={() => {
+						if (window.confirm("Delete this bulk run and all its child runs? This cannot be undone.")) {
+							deleteBulk.mutate();
+						}
+					}}
+				>
+					<Trash2Icon data-icon="inline-start" />
+					{deleteBulk.isPending ? "Deleting…" : "Delete"}
 				</Button>
 			</div>
 

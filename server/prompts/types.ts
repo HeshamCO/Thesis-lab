@@ -35,6 +35,9 @@ export type AttackerBuildParams = {
 	history: AttemptHistoryEntry[];
 	previousFeedback: string;
 	retrievalQuery: string;
+	// v6+ only: when set (BIPIA suite scenarios), constrain the attacker to a specific BIPIA
+	// attack family across attempts. Older prompt versions ignore the field.
+	attackTypeHint?: { name: string; description: string };
 };
 
 export type BenignBuildParams = {
@@ -45,6 +48,7 @@ export type BenignBuildParams = {
 	labelRetrievedDocuments: boolean;
 	toolsAvailable: boolean;
 	structuredBenignOutput: boolean;
+	attemptNumber: number;
 };
 
 export type JudgeBuildParams = {

@@ -118,7 +118,7 @@ export const api = {
 		request<AttackerArtifact>(`/api/runs/${runId}/attempts/${attemptId}/artifacts/${artifactId}`),
 	bulkRuns: () => request<BulkRunRecord[]>("/api/bulk-runs"),
 	bulkRun: (id: string) =>
-		request<{ bulkRun: BulkRunRecord; runs: RunListItem[]; dashboard: BulkRunDashboard }>(
+		request<{ bulkRun: BulkRunRecord; runs: RunListItem[]; dashboard: BulkRunDashboard; activeCount: number }>(
 			`/api/bulk-runs/${id}`,
 		),
 	createBulkRun: (data: BulkRunInput) =>
@@ -128,6 +128,7 @@ export const api = {
 		}),
 	resumeFailedInBulk: (bulkRunId: string) =>
 		request<{ resumed: number }>(`/api/bulk-runs/${bulkRunId}/resume-failed`, { method: "POST" }),
+	deleteBulkRun: (id: string) => request<void>(`/api/bulk-runs/${id}`, { method: "DELETE" }),
 	bulkExportCsvUrl: (bulkRunId: string) => `/api/bulk-runs/${bulkRunId}/export.csv`,
 	sweeps: () => request<Array<{ id: string; name: string; createdAt: string }>>("/api/sweeps"),
 	sweep: (id: string) =>
@@ -145,6 +146,7 @@ export const api = {
 			`/api/sweeps/${id}/stop`,
 			{ method: "POST" },
 		),
+	deleteSweep: (id: string) => request<void>(`/api/sweeps/${id}`, { method: "DELETE" }),
 	prompts: () =>
 		request<{
 			attacker: Array<{ id: string; description: string; system: string; user: string }>;

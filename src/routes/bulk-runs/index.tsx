@@ -1,6 +1,6 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { GitCompareIcon, PlayIcon } from "lucide-react";
+import { GitCompareIcon, PlayIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
@@ -22,9 +22,12 @@ import { api } from "#/lib/thesis/api";
 import { filterModelsByRole } from "#/lib/thesis/model-roles";
 import { queryKeys } from "#/lib/thesis/query";
 import {
+	ATTACKER_PROMPT_VERSIONS,
+	BENIGN_PROMPT_VERSIONS,
 	DEFAULT_ATTACKER_PROMPT_VERSION,
 	DEFAULT_BENIGN_PROMPT_VERSION,
 	DEFAULT_JUDGE_PROMPT_VERSION,
+	JUDGE_PROMPT_VERSIONS,
 	type BulkRunInput,
 } from "#/lib/thesis/schemas";
 
@@ -47,6 +50,8 @@ function BulkRunsPage() {
 		labelRetrievedDocuments: false,
 		structuredBenignOutput: true,
 		replicas: 1,
+		concurrency: 1,
+		perModelConcurrency: 4,
 		shuffleSeed: undefined,
 	});
 	const navigate = useNavigate();
@@ -65,6 +70,15 @@ function BulkRunsPage() {
 			current.defenseConfigId ? current : { ...current, defenseConfigId: baseline.id },
 		);
 	}, [defenses.data, form.defenseConfigId]);
+
+	const deleteBulk = useMutation({
+		mutationFn: api.deleteBulkRun,
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.bulkRuns });
+			toast.success("Bulk run deleted.");
+		},
+		onError: (error) => toast.error(error.message),
+	});
 
 	const createBulk = useMutation({
 		mutationFn: api.createBulkRun,
@@ -173,6 +187,40 @@ function BulkRunsPage() {
 								}}
 							/>
 						</div>
+						<div className="flex flex-col gap-1">
+							<Label>Concurrency (parallel runs in this bulk)</Label>
+							<Input
+								type="number"
+								min={1}
+								max={8}
+								value={form.concurrency ?? 1}
+								onChange={(event) =>
+									setForm({ ...form, concurrency: Math.max(1, Math.min(8, Number(event.target.value) || 1)) })
+								}
+							/>
+							<p className="text-xs text-muted-foreground">
+								1 = strictly serial. Raise to fan out independent scenarios; per-model cap below
+								keeps any single model from being overrun.
+							</p>
+						</div>
+						<div className="flex flex-col gap-1">
+							<Label>Per-model concurrency cap</Label>
+							<Input
+								type="number"
+								min={1}
+								max={8}
+								value={form.perModelConcurrency ?? 4}
+								onChange={(event) =>
+									setForm({
+										...form,
+										perModelConcurrency: Math.max(1, Math.min(8, Number(event.target.value) || 4)),
+									})
+								}
+							/>
+							<p className="text-xs text-muted-foreground">
+								Max simultaneous calls hitting the same model id (defends against rate limits).
+							</p>
+						</div>
 					</div>
 
 					<div className="grid gap-3 md:grid-cols-3">
@@ -201,6 +249,63 @@ function BulkRunsPage() {
 							⚠ {selfJudgingWarning}
 						</p>
 					) : null}
+
+					<div className="grid gap-3 md:grid-cols-3">
+						<div className="flex flex-col gap-1">
+							<Label>Attacker prompt schema</Label>
+							<Select
+								value={form.attackerPromptVersion}
+								onValueChange={(v) =>
+									setForm({ ...form, attackerPromptVersion: v as BulkRunInput["attackerPromptVersion"] })
+								}
+							>
+								<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+								<SelectContent>
+									<SelectGroup>
+										{ATTACKER_PROMPT_VERSIONS.map((v) => (
+											<SelectItem key={v} value={v}>{v}</SelectItem>
+										))}
+									</SelectGroup>
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex flex-col gap-1">
+							<Label>Benign prompt schema</Label>
+							<Select
+								value={form.benignPromptVersion}
+								onValueChange={(v) =>
+									setForm({ ...form, benignPromptVersion: v as BulkRunInput["benignPromptVersion"] })
+								}
+							>
+								<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+								<SelectContent>
+									<SelectGroup>
+										{BENIGN_PROMPT_VERSIONS.map((v) => (
+											<SelectItem key={v} value={v}>{v}</SelectItem>
+										))}
+									</SelectGroup>
+								</SelectContent>
+							</Select>
+						</div>
+						<div className="flex flex-col gap-1">
+							<Label>Judge prompt schema</Label>
+							<Select
+								value={form.judgePromptVersion}
+								onValueChange={(v) =>
+									setForm({ ...form, judgePromptVersion: v as BulkRunInput["judgePromptVersion"] })
+								}
+							>
+								<SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+								<SelectContent>
+									<SelectGroup>
+										{JUDGE_PROMPT_VERSIONS.map((v) => (
+											<SelectItem key={v} value={v}>{v}</SelectItem>
+										))}
+									</SelectGroup>
+								</SelectContent>
+							</Select>
+						</div>
+					</div>
 
 					<div className="grid gap-3 md:grid-cols-2">
 						<div className="flex flex-col gap-1">
@@ -312,6 +417,7 @@ function BulkRunsPage() {
 								<TableHead>Status</TableHead>
 								<TableHead>Runs</TableHead>
 								<TableHead>Created</TableHead>
+								<TableHead className="w-8" />
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -343,14 +449,29 @@ function BulkRunsPage() {
 										<TableCell className="capitalize">{bulk.status}</TableCell>
 										<TableCell>{bulk.totalRuns}</TableCell>
 										<TableCell>{new Date(bulk.createdAt).toLocaleString()}</TableCell>
-									</TableRow>
-								);
-							})}
-							{bulkRuns.data && bulkRuns.data.length === 0 ? (
-								<TableRow>
-									<TableCell colSpan={5} className="text-center text-muted-foreground">
-										No bulk runs yet.
+									<TableCell>
+										<Button
+											size="icon"
+											variant="ghost"
+											className="h-7 w-7 text-destructive hover:text-destructive"
+											disabled={deleteBulk.isPending}
+											onClick={() => {
+												if (window.confirm(`Delete "${bulk.name}" and all its child runs?`)) {
+													deleteBulk.mutate(bulk.id);
+												}
+											}}
+										>
+											<Trash2Icon className="h-4 w-4" />
+										</Button>
 									</TableCell>
+								</TableRow>
+							);
+						})}
+						{bulkRuns.data && bulkRuns.data.length === 0 ? (
+							<TableRow>
+								<TableCell colSpan={6} className="text-center text-muted-foreground">
+									No bulk runs yet.
+								</TableCell>
 								</TableRow>
 							) : null}
 						</TableBody>

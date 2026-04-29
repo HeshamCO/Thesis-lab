@@ -14,12 +14,12 @@ export const evaluatorTypeSchema = z.enum([
 
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
-export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5"] as const;
+export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5", "attacker@v6"] as const;
 export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4"] as const;
-export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5"] as const;
-export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v5";
+export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5", "judge@v6"] as const;
+export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v6";
 export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v4";
-export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v5";
+export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v6";
 
 export const ATTACK_EFFECTS = ["none", "partial", "full"] as const;
 export type AttackEffectLabel = (typeof ATTACK_EFFECTS)[number];
@@ -121,6 +121,14 @@ export const toolDefinitionInputSchema = z.object({
 	executor: toolExecutorSchema,
 });
 
+export const SCENARIO_SUITES = ["v1", "bipia"] as const;
+export type ScenarioSuite = (typeof SCENARIO_SUITES)[number];
+
+export const attackTypeHintSchema = z.object({
+	name: z.string().trim().min(1),
+	description: z.string().trim().min(1),
+});
+
 export const scenarioInputSchema = z.object({
 	name: z.string().trim().min(1),
 	description: z.string().trim().optional().default(""),
@@ -131,7 +139,13 @@ export const scenarioInputSchema = z.object({
 	documents: z.array(scenarioDocumentInputSchema).default([]),
 	successSteps: z.array(successStepInputSchema).min(1),
 	tools: z.array(toolDefinitionInputSchema).default([]),
+	suite: z.enum(SCENARIO_SUITES).optional(),
+	// Opt-in: BIPIA v2 scenarios populate this so attacker@v6 can constrain the attack family.
+	attackTypeHint: attackTypeHintSchema.optional(),
 });
+
+export const modelProviderSchema = z.enum(["cliproxy", "openrouter", "ollama", "openai-compat"]);
+export type ModelProvider = z.infer<typeof modelProviderSchema>;
 
 export const modelConfigInputSchema = z.object({
 	name: z.string().trim().min(1),
@@ -141,6 +155,9 @@ export const modelConfigInputSchema = z.object({
 	temperature: z.coerce.number().min(0).max(2).default(0.2),
 	maxTokens: z.coerce.number().int().min(32).max(20000).default(1200),
 	roleTags: z.array(z.string().trim().min(1)).default([]),
+	// Optional today; engine uses it to branch reasoning param shape and request headers.
+	// Defaults to 'openai-compat' for unknown bases. Routed through resolver/engine, not stored here.
+	provider: modelProviderSchema.optional(),
 });
 
 export const defenseConfigInputSchema = z.object({
@@ -234,6 +251,11 @@ export type BulkRunConfig = {
 	structuredBenignOutput: boolean;
 	replicas: number;
 	shuffleSeed: number;
+	// Max simultaneously-running runs within this bulk. 1 = strictly serial (legacy behavior).
+	concurrency: number;
+	// Cap on simultaneous calls hitting the same modelId across the bulk. Prevents per-account
+	// rate-limit thrash when concurrency is high but the bulk uses one model triple repeatedly.
+	perModelConcurrency: number;
 };
 
 export type BulkRunRecord = {
@@ -265,6 +287,8 @@ export const bulkRunInputSchema = z.object({
 	structuredBenignOutput: z.coerce.boolean().default(true),
 	replicas: z.coerce.number().int().min(1).max(20).default(1),
 	shuffleSeed: z.coerce.number().int().min(0).optional(),
+	concurrency: z.coerce.number().int().min(1).max(8).default(1),
+	perModelConcurrency: z.coerce.number().int().min(1).max(8).default(4),
 });
 
 export type BulkRunInput = z.infer<typeof bulkRunInputSchema>;
@@ -338,6 +362,12 @@ export type AttemptRecord = {
 	error: string;
 	rawAttackerOutput: string;
 	rawAttackerParseOk: boolean;
+	// 0..100 — char-bigram Jaccard against the prior attempt's injectedDocument. 0 on attempt 1.
+	// Two consecutive attempts with score > 70 emit a `attacker_mode_collapse_detected` log.
+	injectionSimilarity: number;
+	// Upstream OpenAI-compatible response IDs. Two attempts with the same id = cache hit.
+	attackerResponseId: string;
+	benignResponseId: string;
 	attackDurationMs: number;
 	benignDurationMs: number;
 	totalDurationMs: number;

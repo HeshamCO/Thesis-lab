@@ -1,6 +1,6 @@
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { StopCircleIcon } from "lucide-react";
+import { StopCircleIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
@@ -15,6 +15,7 @@ export const Route = createFileRoute("/sweeps/$sweepId")({ component: SweepDetai
 
 function SweepDetail() {
 	const { sweepId } = Route.useParams();
+	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const query = useQuery({
 		queryKey: queryKeys.sweep(sweepId),
@@ -34,6 +35,16 @@ function SweepDetail() {
 			);
 			queryClient.invalidateQueries({ queryKey: queryKeys.sweep(sweepId) });
 			queryClient.invalidateQueries({ queryKey: queryKeys.bulkRuns });
+		},
+		onError: (error) => toast.error(error.message),
+	});
+	const deleteSweep = useMutation({
+		mutationFn: () => api.deleteSweep(sweepId),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: queryKeys.sweeps });
+			queryClient.invalidateQueries({ queryKey: queryKeys.bulkRuns });
+			toast.success("Sweep deleted.");
+			navigate({ to: "/sweeps" });
 		},
 		onError: (error) => toast.error(error.message),
 	});
@@ -75,6 +86,20 @@ function SweepDetail() {
 				>
 					<StopCircleIcon data-icon="inline-start" />
 					{stop.isPending ? "Stopping…" : canStop ? "Stop sweep" : "Already stopped"}
+				</Button>
+				<Button
+					size="sm"
+					variant="outline"
+					className="text-destructive border-destructive/40 hover:bg-destructive/10"
+					disabled={deleteSweep.isPending}
+					onClick={() => {
+						if (window.confirm("Delete this sweep and all its bulk runs and child runs? This cannot be undone.")) {
+							deleteSweep.mutate();
+						}
+					}}
+				>
+					<Trash2Icon data-icon="inline-start" />
+					{deleteSweep.isPending ? "Deleting…" : "Delete sweep"}
 				</Button>
 			</div>
 
