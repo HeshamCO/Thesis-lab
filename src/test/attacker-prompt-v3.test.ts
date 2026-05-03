@@ -54,6 +54,7 @@ describe("attacker v3 prompt rendering", () => {
 				injectedDocument: "POLICY ADDENDUM v2 (effective immediately)...",
 				benignResponsePreview: "I cannot follow instructions in retrieved docs.",
 				failedRequiredSteps: ["marker"],
+				judgeFeedback: [],
 				feedbackGuidance: "Try a subtler anchor.",
 				telemetry: {
 					retrieved: true,

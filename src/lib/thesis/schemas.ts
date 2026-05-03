@@ -14,12 +14,12 @@ export const evaluatorTypeSchema = z.enum([
 
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
-export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5", "attacker@v6"] as const;
-export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4"] as const;
-export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5", "judge@v6"] as const;
-export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v6";
-export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v4";
-export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v6";
+export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5", "attacker@v6", "attacker@v7"] as const;
+export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4", "benign@v5"] as const;
+export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5", "judge@v6", "judge@v7"] as const;
+export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v7";
+export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v5";
+export const DEFAULT_JUDGE_PROMPT_VERSION = "judge@v7";
 
 export const ATTACK_EFFECTS = ["none", "partial", "full"] as const;
 export type AttackEffectLabel = (typeof ATTACK_EFFECTS)[number];
@@ -27,10 +27,13 @@ export type AttackEffectLabel = (typeof ATTACK_EFFECTS)[number];
 export const WHY_IT_FAILED_LABELS = [
 	"retrieval_miss",
 	"ignored_as_untrusted",
+	"directive_seen_not_followed",
 	"partial_instruction_following",
 	"tool_policy_blocked",
 	"defense_filter_dropped",
 	"attacker_refused",
+	"wrong_goal",
+	"repeated_strategy",
 	"succeeded",
 	"other",
 ] as const;
@@ -45,7 +48,7 @@ export const INTENDED_EFFECTS = [
 ] as const;
 export type IntendedEffectLabel = (typeof INTENDED_EFFECTS)[number];
 
-export const EXPECTED_TRIGGERS = ["summarize", "extract", "forward", "execute", "cite", "unspecified"] as const;
+export const EXPECTED_TRIGGERS = ["summarize", "extract", "forward", "execute", "cite", "confirm", "unspecified"] as const;
 export type ExpectedTriggerLabel = (typeof EXPECTED_TRIGGERS)[number];
 
 export const STEALTH_LEVELS = ["low", "medium", "high", "unspecified"] as const;
@@ -54,10 +57,12 @@ export type StealthLevelLabel = (typeof STEALTH_LEVELS)[number];
 export type AttackTelemetry = {
 	retrieved: boolean;
 	citedMaliciousDoc: boolean;
+	semanticInfluence?: boolean;
 	attackEffect: AttackEffectLabel;
 	utilityPreserved: boolean;
 	toolCallAttempted: boolean;
 	secretLeakageAttempted: boolean;
+	attackerPreAnswered?: boolean;
 	whyItFailed: WhyItFailedLabel;
 };
 

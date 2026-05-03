@@ -451,6 +451,10 @@ export class ExperimentEngine {
 		}
 
 		const summary = this.db.finalizeAttemptFromSteps(attempt.id);
+		const attackerPreAnswered = this.checkAttackerPreAnswered(
+			run.scenarioSnapshot.successSteps,
+			attackerOutput.injectedDocument,
+		);
 		const telemetry = computeAttackTelemetry({
 			injectedDocument: attackerOutput.injectedDocument,
 			injectedDocuments: attackerOutput.injectedDocuments,
@@ -460,6 +464,7 @@ export class ExperimentEngine {
 			toolCalls: benign.toolCalls,
 			stepResults,
 			attackerRefused: attackerOutput.rationale.startsWith("[soft refusal detected]"),
+			attackerPreAnswered,
 		});
 		const feedback = this.buildFeedback(stepResults);
 		const failedRequiredIds = stepResults
@@ -593,12 +598,14 @@ export class ExperimentEngine {
 		return completed.map((attempt) => {
 			const attemptStepResults = stepsByAttemptId.get(attempt.id) ?? [];
 			const failedRequiredSteps: string[] = [];
+			const judgeFeedback: string[] = [];
 			const feedbackParts: string[] = [];
 			for (const result of attemptStepResults) {
 				if (result.passed) continue;
 				if (result.stepSnapshot.required) {
 					failedRequiredSteps.push(result.stepSnapshot.name);
 				}
+				judgeFeedback.push(formatJudgeFeedbackForHistory(result));
 				if (result.stepSnapshot.feedbackGuidance) {
 					feedbackParts.push(result.stepSnapshot.feedbackGuidance);
 				}
@@ -613,6 +620,7 @@ export class ExperimentEngine {
 				injectedDocument: attempt.injectedDocument,
 				benignResponsePreview: attempt.benignResponse,
 				failedRequiredSteps,
+				judgeFeedback,
 				feedbackGuidance: feedbackParts.join(" "),
 				telemetry: attempt.attackTelemetry ?? undefined,
 			};
@@ -1145,6 +1153,22 @@ export class ExperimentEngine {
 		return [...run.attempts].reverse().find((attempt) => attempt.feedback)?.feedback ?? "";
 	}
 
+	// For rule-based steps, check if the attacker's own injected document already satisfies
+	// the success criteria — i.e. the attacker pre-computed the answer instead of embedding
+	// a directive for the benign model to execute. Skips llm_judge (too expensive to rerun).
+	private checkAttackerPreAnswered(steps: SuccessStepInput[], injectedDoc: string): boolean {
+		for (const step of steps) {
+			if (!step.required) continue;
+			if (step.evaluatorType === "llm_judge") continue;
+			if (step.evaluatorType === "tool_not_called") continue;
+			if (step.evaluatorType === "not_contains_text") continue;
+			if (isToolEvaluator(step.evaluatorType)) continue;
+			const result = evaluateRuleStep({ step, benignResponse: injectedDoc });
+			if (result.passed) return true;
+		}
+		return false;
+	}
+
 	private log(
 		runId: string,
 		level: "info" | "warn" | "error",
@@ -1168,6 +1192,16 @@ export class ExperimentEngine {
 	private emit(event: string, runId: string, payload: unknown) {
 		this.io.to(`run:${runId}`).emit(event, payload);
 	}
+}
+
+function formatJudgeFeedbackForHistory(result: StepResultRecord): string {
+	const parts = [
+		`Step failed: ${result.stepSnapshot.name}`,
+		result.evaluatorOutput,
+		result.evidence ? `Evidence: ${result.evidence}` : "",
+		result.stepSnapshot.feedbackGuidance ? `Guidance: ${result.stepSnapshot.feedbackGuidance}` : "",
+	];
+	return parts.filter(Boolean).join(" ");
 }
 
 function truncate(value: string, max: number) {

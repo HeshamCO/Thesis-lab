@@ -285,6 +285,25 @@ export const MODEL_CATALOG: readonly CatalogEntry[] = [
 		},
 		capabilities: { acceptsTemperature: true, acceptsMaxTokens: true, toolCalls: false },
 	},
+		{
+		key: "openrouter/google/gemini-3.1-pro-preview",
+		displayName: "gemini 3.1 pro (OpenRouter)",
+		modelId: "google/gemini-3.1-pro-preview",
+		family: "google",
+		provider: "openrouter",
+		baseUrl: OPENROUTER_BASE_URL,
+		apiKeyEnvVar: "OPENROUTER_API_KEY",
+		// Non-reasoning: pin to benign so it isn't accidentally selected for attacker/judge.
+		allowedRoles: ["attacker"],
+		perRole: {
+			attacker: { temperature: 0.7, maxTokens: 3000, frequencyPenalty: 0.7 },
+			benign: { temperature: 0.3, maxTokens: 2000, frequencyPenalty: 1 },
+			judge: { temperature: 0.2, maxTokens: 1500, frequencyPenalty: 1 },
+		},
+		capabilities: { acceptsTemperature: true, acceptsMaxTokens: true, toolCalls: false },
+	},
+
+	
 
 	// ── Ollama (open-weight, hosted at SSA endpoint) ──────────────────────
 	// These models mode-collapse on creative red-team tasks at low temperature. The catalog

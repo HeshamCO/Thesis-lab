@@ -12,6 +12,7 @@ export type AttemptHistoryEntry = {
 	injectedDocument: string;
 	benignResponsePreview: string;
 	failedRequiredSteps: string[];
+	judgeFeedback: string[];
 	feedbackGuidance: string;
 	telemetry?: AttackTelemetry;
 };
