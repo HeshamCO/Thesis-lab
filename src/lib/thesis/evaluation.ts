@@ -12,6 +12,26 @@ export function defenseAppliesPromptGuard(defense: Pick<DefenseConfig, "mode">):
 	return defense.mode === "prompt_guard" || defense.mode === "combined";
 }
 
+/**
+ * StruQ defense (Chen, Piet, Sitawarin, Wagner — USENIX Security 2025).
+ *
+ * The benign prompt builder consults this helper to decide whether to:
+ *   1. Wrap the system/user prompt with reserved-token delimiters that mark
+ *      the boundary between trusted prompt ([INST]) and untrusted data
+ *      ([INPT]) channels.
+ *   2. Recursively filter the data channel to strip any occurrence of those
+ *      reserved-token strings (and `##`) so an attacker cannot spoof a
+ *      delimiter via Completion-style attacks.
+ *
+ * This implements the *front-end* portion of StruQ. The paper's structured
+ * instruction tuning (training-time) is out of scope for an inference-only
+ * lab — but the front-end alone significantly raises the bar against the
+ * Completion-Real / Completion-Other / Escape attack families.
+ */
+export function defenseAppliesStruq(defense: Pick<DefenseConfig, "mode">): boolean {
+	return defense.mode === "struq";
+}
+
 export type EvaluationInput = {
 	step: SuccessStepInput;
 	benignResponse: string;

@@ -10,6 +10,7 @@ import { benignV2 } from "./benign/v2";
 import { benignV3 } from "./benign/v3";
 import { benignV4 } from "./benign/v4";
 import { benignV5 } from "./benign/v5";
+import { benignV6 } from "./benign/v6";
 import { judgeV1 } from "./judge/v1";
 import { judgeV2 } from "./judge/v2";
 import { judgeV3 } from "./judge/v3";
@@ -49,6 +50,7 @@ const benignPrompts: Record<string, BenignPromptVersion> = {
 	[benignV3.id]: benignV3,
 	[benignV4.id]: benignV4,
 	[benignV5.id]: benignV5,
+	[benignV6.id]: benignV6,
 };
 
 const judgePrompts: Record<string, JudgePromptVersion> = {

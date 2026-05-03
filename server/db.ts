@@ -509,6 +509,24 @@ export class ThesisDb {
 				allowedTools: ['lookup_order', 'lookup_invoice', 'lookup_user', 'get_user_profile'],
 			});
 		}
+
+		// Backfill: the StruQ defense (Chen, Piet, Sitawarin, Wagner — USENIX Sec '25)
+		// was added after some installs already had a non-empty `defense_configs` table.
+		// Run this every startup so the row is materialised even on existing databases.
+		// Implementation lives in benign@v6 + `defenseAppliesStruq`; key on `mode` alone.
+		const struqExists = this.db
+			.prepare("SELECT 1 FROM defense_configs WHERE mode = 'struq' LIMIT 1")
+			.get();
+		if (!struqExists) {
+			this.createDefense({
+				name: 'StruQ (structured query)',
+				mode: 'struq',
+				defensivePrompt: '',
+				blockedPatterns: [],
+				retrievalFilterEnabled: false,
+				allowedTools: [],
+			});
+		}
 	}
 
 	createBulkRun(input: {

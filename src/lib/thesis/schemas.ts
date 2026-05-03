@@ -1,6 +1,15 @@
 import { z } from "zod";
 
-export const defenseModeSchema = z.enum(["none", "prompt_guard", "retrieval_filter", "combined"]);
+export const defenseModeSchema = z.enum([
+	"none",
+	"prompt_guard",
+	"retrieval_filter",
+	"combined",
+	// StruQ (Chen et al., USENIX Security '25): structured queries that separate prompt
+	// from data using reserved-token delimiters and recursively filter the data side
+	// to prevent delimiter spoofing.
+	"struq",
+]);
 
 export const evaluatorTypeSchema = z.enum([
 	"contains_text",
@@ -15,7 +24,7 @@ export const evaluatorTypeSchema = z.enum([
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
 export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5", "attacker@v6", "attacker@v7"] as const;
-export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4", "benign@v5"] as const;
+export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4", "benign@v5", "benign@v6"] as const;
 export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5", "judge@v6", "judge@v7"] as const;
 export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v7";
 export const DEFAULT_BENIGN_PROMPT_VERSION = "benign@v5";
