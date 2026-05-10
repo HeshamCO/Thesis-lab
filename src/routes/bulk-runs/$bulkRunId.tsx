@@ -8,14 +8,7 @@ import { Button } from "#/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "#/components/ui/card";
 import { Progress } from "#/components/ui/progress";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
-import {
-	ChartCard,
-	SimpleBar,
-	SimpleLine,
-	SimplePie,
-	formatMs,
-	formatPercent,
-} from "#/components/thesis/charts";
+import { ChartCard, SimpleBar, SimpleLine, SimplePie, formatMs, formatPercent } from "#/components/thesis/charts";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
 
@@ -57,9 +50,7 @@ function BulkRunDashboard() {
 	const { bulkRun, runs, dashboard, activeCount } = query.data;
 	const concurrencyConfigured = bulkRun.config.concurrency ?? 1;
 	const progress =
-		dashboard.totalRuns > 0
-			? ((dashboard.completedRuns + dashboard.failedRuns) / dashboard.totalRuns) * 100
-			: 0;
+		dashboard.totalRuns > 0 ? ((dashboard.completedRuns + dashboard.failedRuns) / dashboard.totalRuns) * 100 : 0;
 
 	const scenarioBarData = [...dashboard.perScenario]
 		.filter((s) => s.attackSuccessRate !== null)
@@ -165,11 +156,7 @@ function BulkRunDashboard() {
 			/>
 
 			<div className="flex flex-wrap gap-2">
-				<Button
-					asChild
-					size="sm"
-					variant="outline"
-				>
+				<Button asChild size="sm" variant="outline">
 					<a href={api.bulkExportCsvUrl(bulkRun.id)} download>
 						<DownloadIcon data-icon="inline-start" />
 						Export CSV
@@ -221,9 +208,7 @@ function BulkRunDashboard() {
 						<CardTitle>Run-level success rate</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-3xl font-semibold">
-							{(dashboard.overallSuccessRate * 100).toFixed(1)}%
-						</div>
+						<div className="text-3xl font-semibold">{(dashboard.overallSuccessRate * 100).toFixed(1)}%</div>
 						<p className="text-xs text-muted-foreground">
 							95% CI [{(dashboard.overallSuccessRateCi.low * 100).toFixed(0)}%–
 							{(dashboard.overallSuccessRateCi.high * 100).toFixed(0)}%]
@@ -238,16 +223,12 @@ function BulkRunDashboard() {
 						<CardTitle>Attempt-level success</CardTitle>
 					</CardHeader>
 					<CardContent>
-						<div className="text-3xl font-semibold">
-							{(dashboard.attemptSuccessRate * 100).toFixed(1)}%
-						</div>
+						<div className="text-3xl font-semibold">{(dashboard.attemptSuccessRate * 100).toFixed(1)}%</div>
 						<p className="text-xs text-muted-foreground">
 							95% CI [{(dashboard.attemptSuccessRateCi.low * 100).toFixed(0)}%–
 							{(dashboard.attemptSuccessRateCi.high * 100).toFixed(0)}%]
 						</p>
-						<p className="text-sm text-muted-foreground">
-							{dashboard.totalAttempts} attempts total
-						</p>
+						<p className="text-sm text-muted-foreground">{dashboard.totalAttempts} attempts total</p>
 					</CardContent>
 				</Card>
 				<Card>
@@ -278,22 +259,13 @@ function BulkRunDashboard() {
 			</div>
 
 			<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-				<ChartCard
-					title="Run status"
-					description="Distribution of child run lifecycle states."
-				>
+				<ChartCard title="Run status" description="Distribution of child run lifecycle states.">
 					<SimplePie data={statusPie} />
 				</ChartCard>
-				<ChartCard
-					title="Run outcomes"
-					description="Final attack success vs failure across completed runs."
-				>
+				<ChartCard title="Run outcomes" description="Final attack success vs failure across completed runs.">
 					<SimplePie data={outcomePie} />
 				</ChartCard>
-				<ChartCard
-					title="Attack effect"
-					description="Distribution of attack effect severity across attempts."
-				>
+				<ChartCard title="Attack effect" description="Distribution of attack effect severity across attempts.">
 					<SimplePie data={attackEffectPie} />
 				</ChartCard>
 
@@ -333,10 +305,7 @@ function BulkRunDashboard() {
 						yTickFormatter={(v) => `${v}%`}
 					/>
 				</ChartCard>
-				<ChartCard
-					title="Cumulative success rate"
-					description="Running success rate as completed runs accumulate."
-				>
+				<ChartCard title="Cumulative success rate" description="Running success rate as completed runs accumulate.">
 					<SimpleLine
 						data={cumulativeData}
 						xKey="runIndex"
@@ -344,10 +313,7 @@ function BulkRunDashboard() {
 						yTickFormatter={(v) => `${v}%`}
 					/>
 				</ChartCard>
-				<ChartCard
-					title="Duration by phase"
-					description="Mean latency per attempt across attacker / benign / total."
-				>
+				<ChartCard title="Duration by phase" description="Mean latency per attempt across attacker / benign / total.">
 					<SimpleBar
 						data={durationData}
 						xKey="phase"
@@ -382,21 +348,14 @@ function BulkRunDashboard() {
 						]}
 					/>
 				</ChartCard>
-				<ChartCard
-					title="Token usage"
-					description="Mean tokens per attempt per role (attacker vs benign)."
-				>
-					<SimpleBar
-						data={tokensData}
-						xKey="role"
-						bars={[{ key: "tokens", label: "Mean tokens", colorIndex: 4 }]}
-					/>
+				<ChartCard title="Token usage" description="Mean tokens per attempt per role (attacker vs benign).">
+					<SimpleBar data={tokensData} xKey="role" bars={[{ key: "tokens", label: "Mean tokens", colorIndex: 4 }]} />
 				</ChartCard>
 
 				<ChartCard
 					title="Strategy: success vs failure"
 					description="Which attacker strategies land vs get blocked?"
-					className="md:col-span-2"
+					className="md:col-span-full"
 				>
 					<SimpleBar
 						data={strategyData}
@@ -407,10 +366,7 @@ function BulkRunDashboard() {
 						]}
 					/>
 				</ChartCard>
-				<ChartCard
-					title="Intended effect"
-					description="Attempt count + success rate per intended effect."
-				>
+				<ChartCard title="Intended effect" description="Attempt count + success rate per intended effect.">
 					<SimpleBar
 						data={intendedEffectData}
 						xKey="intendedEffect"
@@ -430,10 +386,7 @@ function BulkRunDashboard() {
 						]}
 					/>
 				</ChartCard>
-				<ChartCard
-					title="Expected trigger"
-					description="Which user-intent triggers do attackers exploit?"
-				>
+				<ChartCard title="Expected trigger" description="Which user-intent triggers do attackers exploit?">
 					<SimpleBar
 						data={triggerData}
 						xKey="expectedTrigger"
@@ -446,13 +399,9 @@ function BulkRunDashboard() {
 				<ChartCard
 					title="Why attacks failed"
 					description="Failure-mode breakdown over failed attempts."
-					className="md:col-span-2"
+					className="md:col-span-full"
 				>
-					<SimpleBar
-						data={whyFailedData}
-						xKey="reason"
-						bars={[{ key: "count", label: "Failures", colorIndex: 3 }]}
-					/>
+					<SimpleBar data={whyFailedData} xKey="reason" bars={[{ key: "count", label: "Failures", colorIndex: 3 }]} />
 				</ChartCard>
 			</div>
 
@@ -479,11 +428,7 @@ function BulkRunDashboard() {
 							{dashboard.perScenario.map((row) => (
 								<TableRow key={row.runId}>
 									<TableCell>
-										<Link
-											to="/runs/$runId"
-											params={{ runId: row.runId }}
-											className="hover:underline"
-										>
+										<Link to="/runs/$runId" params={{ runId: row.runId }} className="hover:underline">
 											{row.scenarioName}
 										</Link>
 									</TableCell>
@@ -494,17 +439,9 @@ function BulkRunDashboard() {
 									<TableCell className="font-mono text-xs">
 										{row.successAttempts}/{row.failAttempts}
 									</TableCell>
-									<TableCell>
-										{row.finalSuccess === null ? "—" : row.finalSuccess ? "success" : "no"}
-									</TableCell>
-									<TableCell>
-										{row.attackSuccessRate === null
-											? "—"
-											: formatPercent(row.attackSuccessRate)}
-									</TableCell>
-									<TableCell>
-										{row.utilityScore === null ? "—" : row.utilityScore.toFixed(2)}
-									</TableCell>
+									<TableCell>{row.finalSuccess === null ? "—" : row.finalSuccess ? "success" : "no"}</TableCell>
+									<TableCell>{row.attackSuccessRate === null ? "—" : formatPercent(row.attackSuccessRate)}</TableCell>
+									<TableCell>{row.utilityScore === null ? "—" : row.utilityScore.toFixed(2)}</TableCell>
 									<TableCell>{formatMs(row.meanAttackDurationMs)}</TableCell>
 									<TableCell>{formatMs(row.meanBenignDurationMs)}</TableCell>
 								</TableRow>
@@ -534,11 +471,7 @@ function BulkRunDashboard() {
 								<TableRow key={run.id}>
 									<TableCell>{run.bulkRunIndex ?? "—"}</TableCell>
 									<TableCell>
-										<Link
-											to="/runs/$runId"
-											params={{ runId: run.id }}
-											className="hover:underline"
-										>
+										<Link to="/runs/$runId" params={{ runId: run.id }} className="hover:underline">
 											{run.scenarioName}
 										</Link>
 									</TableCell>
@@ -547,9 +480,7 @@ function BulkRunDashboard() {
 										<div className="flex flex-col gap-1">
 											<StatusBadge status={run.status} />
 											{run.status === "failed" && run.error ? (
-												<span className="text-xs text-red-600 dark:text-red-400">
-													{run.error}
-												</span>
+												<span className="text-xs text-red-600 dark:text-red-400">{run.error}</span>
 											) : null}
 										</div>
 									</TableCell>

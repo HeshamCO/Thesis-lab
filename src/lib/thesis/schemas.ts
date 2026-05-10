@@ -23,7 +23,7 @@ export const evaluatorTypeSchema = z.enum([
 
 export const TOOL_EVALUATOR_TYPES = ["tool_called", "tool_not_called", "tool_called_with"] as const;
 
-export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5", "attacker@v6", "attacker@v7"] as const;
+export const ATTACKER_PROMPT_VERSIONS = ["attacker@v1", "attacker@v2", "attacker@v3", "attacker@v4", "attacker@v5", "attacker@v6", "attacker@v7", "attacker@v8"] as const;
 export const BENIGN_PROMPT_VERSIONS = ["benign@v1", "benign@v2", "benign@v3", "benign@v4", "benign@v5", "benign@v6"] as const;
 export const JUDGE_PROMPT_VERSIONS = ["judge@v1", "judge@v2", "judge@v3", "judge@v4", "judge@v5", "judge@v6", "judge@v7"] as const;
 export const DEFAULT_ATTACKER_PROMPT_VERSION = "attacker@v7";

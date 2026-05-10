@@ -5,6 +5,7 @@ import { attackerV4 } from "./attacker/v4";
 import { attackerV5 } from "./attacker/v5";
 import { attackerV6 } from "./attacker/v6";
 import { attackerV7 } from "./attacker/v7";
+import { attackerV8 } from "./attacker/v8";
 import { benignV1 } from "./benign/v1";
 import { benignV2 } from "./benign/v2";
 import { benignV3 } from "./benign/v3";
@@ -42,6 +43,7 @@ const attackerPrompts: Record<string, AttackerPromptVersion> = {
 	[attackerV5.id]: attackerV5,
 	[attackerV6.id]: attackerV6,
 	[attackerV7.id]: attackerV7,
+	[attackerV8.id]: attackerV8,
 };
 
 const benignPrompts: Record<string, BenignPromptVersion> = {

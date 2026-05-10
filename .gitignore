@@ -13,3 +13,9 @@ __unconfig*
 todos.json
 .claude
 data/*.sqlite*
+
+*.docx
+tmp
+
+.fuse_hidden*
+figures
