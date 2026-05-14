@@ -11,6 +11,7 @@ import { Input } from "#/components/ui/input";
 import { Label } from "#/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#/components/ui/table";
 import { api } from "#/lib/thesis/api";
+import { useReadOnly } from "#/hooks/use-read-only";
 import { filterModelsByRole } from "#/lib/thesis/model-roles";
 import { queryKeys } from "#/lib/thesis/query";
 import {
@@ -35,6 +36,7 @@ type FactorSelections = {
 };
 
 function SweepsPage() {
+	const readOnly = useReadOnly();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
 	const sweeps = useQuery({ queryKey: queryKeys.sweeps, queryFn: api.sweeps });
@@ -293,7 +295,11 @@ function SweepsPage() {
 						{replicas === 1 ? "" : "s"} per cell
 					</p>
 					<div>
-						<Button onClick={submit} disabled={createSweep.isPending}>
+						<Button
+							onClick={submit}
+							disabled={createSweep.isPending || readOnly}
+							title={readOnly ? "Read-only in production — run locally to create sweeps" : undefined}
+						>
 							<PlayIcon data-icon="inline-start" />
 							{createSweep.isPending ? "Creating…" : "Create sweep"}
 						</Button>

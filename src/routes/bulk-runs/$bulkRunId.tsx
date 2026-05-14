@@ -11,10 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "#
 import { ChartCard, SimpleBar, SimpleLine, SimplePie, formatMs, formatPercent } from "#/components/thesis/charts";
 import { api } from "#/lib/thesis/api";
 import { queryKeys } from "#/lib/thesis/query";
+import { useReadOnly } from "#/hooks/use-read-only";
 
 export const Route = createFileRoute("/bulk-runs/$bulkRunId")({ component: BulkRunDashboard });
 
 function BulkRunDashboard() {
+	const readOnly = useReadOnly();
 	const { bulkRunId } = Route.useParams();
 	const navigate = useNavigate();
 	const queryClient = useQueryClient();
@@ -165,7 +167,8 @@ function BulkRunDashboard() {
 				<Button
 					size="sm"
 					variant="outline"
-					disabled={failedRuns.length === 0 || resumeFailed.isPending}
+					disabled={failedRuns.length === 0 || resumeFailed.isPending || readOnly}
+					title={readOnly ? "Read-only in production" : undefined}
 					onClick={() => resumeFailed.mutate()}
 				>
 					<RefreshCwIcon data-icon="inline-start" />

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PlayIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { useReadOnly } from "#/hooks/use-read-only";
 import { PageHeading } from "#/components/thesis/page-heading";
 import { StatusBadge } from "#/components/thesis/status-badge";
 import { Button } from "#/components/ui/button";
@@ -28,6 +29,7 @@ import {
 export const Route = createFileRoute("/runs/")({ component: RunsPage });
 
 function RunsPage() {
+	const readOnly = useReadOnly();
 	const [form, setForm] = useState<StartRunInput>({
 		scenarioId: "",
 		attackerModelId: "",
@@ -220,7 +222,12 @@ function RunsPage() {
 							onCheckedChange={(labelRetrievedDocuments) => setForm({ ...form, labelRetrievedDocuments })}
 						/>
 						<div className="flex items-end col-span-full">
-							<Button className="w-full" type="submit" disabled={startRun.isPending}>
+							<Button
+								className="w-full"
+								type="submit"
+								disabled={startRun.isPending || readOnly}
+								title={readOnly ? "Read-only in production — run locally to start experiments" : undefined}
+							>
 								<PlayIcon data-icon="inline-start" />
 								Start run
 							</Button>

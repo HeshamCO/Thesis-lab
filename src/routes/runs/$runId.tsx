@@ -16,6 +16,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "#/com
 import { Progress } from "#/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "#/components/ui/tabs";
 import { useRunSocket } from "#/hooks/use-run-socket";
+import { useReadOnly } from "#/hooks/use-read-only";
 import { api } from "#/lib/thesis/api";
 import { narrateRun } from "#/lib/thesis/attempt-narrative";
 import { queryKeys } from "#/lib/thesis/query";
@@ -50,6 +51,7 @@ function RunDetailPage() {
 		},
 		onError: (error) => toast.error(error.message),
 	});
+	const readOnly = useReadOnly();
 	const [panel, setPanel] = useState<ArtifactPanelPayload | null>(null);
 
 	if (!run.data) {
@@ -83,13 +85,22 @@ function RunDetailPage() {
 							</a>
 						</Button>
 						{active ? (
-							<Button variant="outline" onClick={() => pauseRun.mutate()} disabled={pauseRun.isPending}>
+							<Button
+								variant="outline"
+								onClick={() => pauseRun.mutate()}
+								disabled={pauseRun.isPending || readOnly}
+								title={readOnly ? "Read-only in production" : undefined}
+							>
 								<PauseIcon data-icon="inline-start" />
 								Pause
 							</Button>
 						) : null}
 						{resumable ? (
-							<Button onClick={() => resumeRun.mutate()} disabled={resumeRun.isPending}>
+							<Button
+								onClick={() => resumeRun.mutate()}
+								disabled={resumeRun.isPending || readOnly}
+								title={readOnly ? "Read-only in production" : undefined}
+							>
 								<PlayIcon data-icon="inline-start" />
 								Resume
 							</Button>

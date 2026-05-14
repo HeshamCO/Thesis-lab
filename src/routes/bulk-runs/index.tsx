@@ -30,10 +30,12 @@ import {
 	JUDGE_PROMPT_VERSIONS,
 	type BulkRunInput,
 } from "#/lib/thesis/schemas";
+import { useReadOnly } from "#/hooks/use-read-only";
 
 export const Route = createFileRoute("/bulk-runs/")({ component: BulkRunsPage });
 
 function BulkRunsPage() {
+	const readOnly = useReadOnly();
 	const [form, setForm] = useState<BulkRunInput>({
 		name: `Bulk run ${new Date().toLocaleString()}`,
 		scenarioIds: [],
@@ -381,7 +383,11 @@ function BulkRunsPage() {
 					</div>
 
 					<div>
-						<Button onClick={handleSubmit} disabled={createBulk.isPending}>
+						<Button
+							onClick={handleSubmit}
+							disabled={createBulk.isPending || readOnly}
+							title={readOnly ? "Read-only in production — run locally to start bulk runs" : undefined}
+						>
 							<PlayIcon data-icon="inline-start" />
 							{createBulk.isPending ? "Starting…" : "Start bulk run"}
 						</Button>
