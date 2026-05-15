@@ -20,6 +20,7 @@ const config = defineConfig({
 	preview: {
 		port: 3333,
 		host: "0.0.0.0",
+		allowedHosts: ["thesis.hir.sa"],
 		proxy,
 	},
 	plugins: [devtools(), tailwindcss(), tanstackStart(), viteReact()],
