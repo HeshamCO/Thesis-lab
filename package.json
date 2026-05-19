@@ -1,5 +1,5 @@
 {
-  "name": "web",
+  "name": "thesis-app",
   "private": true,
   "type": "module",
   "imports": {
